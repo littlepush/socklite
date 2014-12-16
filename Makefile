@@ -91,6 +91,14 @@ AfterMake :
 	rm -vf src/*.o;
 	mv -vf $(SL_ROOT)/libsocklite.so $(OUT_DIR)/dynamic/libsocklite.so.$(shell ./version)
 
+install :
+	mkdir -p /usr/local/include/sl 
+	cp $(SL_ROOT)/inc/*.h /usr/local/include/sl
+	mkdir -p /usr/local/lib
+	cp $(OUT_DIR)/dynamic/libsocklite.so.$(shell ./version) /usr/local/lib
+	rm -f /usr/local/lib/libsocklite.so 
+	ln -s /usr/local/lib/libsocklite.so.$(shell ./version) /usr/local/lib/libsocklite.so 
+
 debug : PreProcess $(STATIC_LIBS) $(DYNAMIC_LIBS) $(EXECUTABLE) $(TEST_CASE) AfterMake
 	@exit 0
 
