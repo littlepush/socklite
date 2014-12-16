@@ -42,7 +42,7 @@ bool sl_tcpsocket::_internal_connect( const string &ipaddr, u_int32_t port )
     u_int32_t _timeout = 1000;
 
     // Try to nslookup the host
-    unsigned int _in_addr = inet_addr( _addr );
+    unsigned int _in_addr = network_domain_to_inaddr( _addr );
     if ( _in_addr == (unsigned int)(-1) ) {
         return false;
     }

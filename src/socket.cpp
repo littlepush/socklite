@@ -22,6 +22,47 @@
 
 #include "socket.h"
 
+// In No-Windows
+#ifndef FAR
+#define FAR
+#endif
+
+/* Translate Domain to IP Address */
+char * network_domain_to_ip(const char * domain, char * output, unsigned int length)
+{
+    struct hostent FAR * _host_ent;
+    struct in_addr _in_addr;
+    char * _c_addr;
+    
+    memset(output, 0, length);
+    
+    _host_ent = gethostbyname(domain);
+    if (_host_ent == NULL) return output;
+    
+    _c_addr = _host_ent->h_addr_list[0];
+    if (_c_addr == NULL) return output;
+    
+    memmove(&_in_addr, _c_addr, 4);
+    strcpy(output, inet_ntoa(_in_addr));
+    
+    return output;
+}
+
+/* Translate Domain to InAddr */
+unsigned int network_domain_to_inaddr(const char * domain)
+{
+    /* Get the IP Address of the domain by invoking network_domain_to_ip */
+    char _c_address[16];
+
+    if (domain == NULL) return INADDR_ANY;
+    if (network_domain_to_ip(domain, _c_address, 16)[0] == '\0') {
+        // Try direct translate the domain
+        return inet_addr(domain);
+        //return (unsigned int)(-1L);
+    }
+    return inet_addr(_c_address);
+}
+
 // Get localhost's computer name on LAN.
 void network_get_localhost_name( string &hostname )
 {

@@ -38,7 +38,8 @@ bool sl_udpsocket::connect( const string &ipaddr, u_int32_t port )
     memset( &m_sock_addr, 0, sizeof(m_sock_addr) );
     m_sock_addr.sin_family = AF_INET;
     m_sock_addr.sin_port = htons(port);
-    if ( inet_aton(ipaddr.c_str(), &m_sock_addr.sin_addr) == 0 ) {
+    char _ip[16];
+    if ( inet_aton(network_domain_to_ip(ipaddr.c_str(), _ip, 16), &m_sock_addr.sin_addr) == 0 ) {
         return false;
     }
 

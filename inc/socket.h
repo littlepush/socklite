@@ -197,6 +197,12 @@ __socket_init_svr_in_windows< 0 >::__g_socksvrInWindows;
 #endif
 #endif
 
+// Translate Domain to IP Address
+char * network_domain_to_ip(const char * domain, char * output, unsigned int length);
+
+// Translate Domain to InAddr
+unsigned int network_domain_to_inaddr(const char * domain);
+
 // Get localhost's computer name on LAN.
 void network_get_localhost_name( string &hostname );
 
