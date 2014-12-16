@@ -53,7 +53,7 @@
 #define SL_TARGET_WIN32  (_SL_PLATFORM_WIN == 1)
 #define SL_TARGET_LINUX  (_SL_PLATFORM_LINUX == 1)
 #define SL_TARGET_MAC    (_SL_PLATFORM_MAC == 1)
-#define SL_TARGET_IOS    (_LS_PLATFORM_IOS == 1)
+#define SL_TARGET_IOS    (_SL_PLATFORM_IOS == 1)
 
 #if SL_TARGET_WIN32
 // Disable the certain warn in Visual Studio for old functions.
