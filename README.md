@@ -57,3 +57,4 @@ How to use
 Change log
 ===
 v0.1 Initialize the library and import tcp & udp socket. Now support socks5 proxy for tcp socket.
+v0.2 Fix some bugs, now support SO_KEEPALIVE
