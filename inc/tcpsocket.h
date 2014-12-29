@@ -59,6 +59,8 @@ public:
 
     // Set current socket reusable or not
     virtual bool set_reusable( bool reusable = true );
+    // Enable TCP_KEEPALIVE or not
+    bool set_keepalive( bool keepalive = true );
 
     // Read data from the socket until timeout or get any data.
     virtual bool read_data( string &buffer, u_int32_t timeout = 1000 );

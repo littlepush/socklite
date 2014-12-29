@@ -118,8 +118,9 @@ SOCKETSTATUE socket_check_status( SOCKET_T hSo, SOCKETOPT option, u_int32_t wait
         if ( _ret > 0 ) {
             char _word;
             // the socket has received a close sig
-            if ( ::recv( hSo, &_word, 1, MSG_PEEK ) <= 0 ) 
+            if ( ::recv( hSo, &_word, 1, MSG_PEEK ) <= 0 ) {
                 return SO_INVALIDATE;
+            }
             return SO_OK;
         }
         if ( _ret < 0 ) return SO_INVALIDATE;

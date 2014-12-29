@@ -142,7 +142,7 @@ typedef enum {
 typedef enum {
     SO_CHECK_WRITE      = 1,
     SO_CHECK_READ       = 2,
-    SO_CHECK_CONNECT    = 4
+    SO_CHECK_CONNECT    = SO_CHECK_WRITE | SO_CHECK_READ
 } SOCKETOPT;
 
 typedef long SOCKET_T;

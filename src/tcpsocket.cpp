@@ -328,6 +328,14 @@ bool sl_tcpsocket::set_reusable( bool reusable )
         (const char *)&_reused, sizeof(int) ) != -1;
 }
 
+bool sl_tcpsocket::set_keepalive( bool keepalive )
+{
+    if ( m_socket == INVALIDATE_SOCKET ) return false;
+    int _keepalive = keepalive ? 1 : 0;
+    return setsockopt( m_socket, SOL_SOCKET, SO_KEEPALIVE, 
+        (const char *)&_keepalive, sizeof(int) );
+}
+
 // Read data from the socket until timeout or get any data.
 bool sl_tcpsocket::read_data( string &buffer, u_int32_t timeout )
 {
