@@ -57,6 +57,9 @@ public:
     virtual sl_socket *get_client( u_int32_t timeout = 100 );
     virtual void release_client( sl_socket *client );
 
+    // Try to get the original destination, this method now only work under linux
+    bool get_original_dest( string &address, u_int32_t &port );
+
     // Set current socket reusable or not
     virtual bool set_reusable( bool reusable = true );
     // Enable TCP_KEEPALIVE or not
