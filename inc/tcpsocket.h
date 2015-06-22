@@ -32,7 +32,8 @@
 class sl_tcpsocket : public sl_socket
 {
 protected:
-    struct pollfd *_svrfd;
+	bool m_iswrapper;
+    //struct pollfd *_svrfd;
     bool m_is_connected_to_proxy;
 
     // Internal connect to peer
@@ -41,7 +42,8 @@ public:
     // The socket handler
     SOCKET_T  m_socket;
 
-    sl_tcpsocket();
+    sl_tcpsocket(bool iswrapper = false);
+	sl_tcpsocket(SOCKET_T so, bool iswrapper = true);
     virtual ~sl_tcpsocket();
 
     // Set up a socks5 proxy.
@@ -54,8 +56,8 @@ public:
     virtual void close();
     // When the socket is a listener, use this method 
     // to accept client's connection.
-    virtual sl_socket *get_client( u_int32_t timeout = 100 );
-    virtual void release_client( sl_socket *client );
+    // virtual sl_socket *get_client( u_int32_t timeout = 100 );
+    // virtual void release_client( sl_socket *client );
 
     // Try to get the original destination, this method now only work under linux
     bool get_original_dest( string &address, u_int32_t &port );

@@ -23,14 +23,25 @@
 #include "tcpsocket.h"
 #include <memory>
 
-sl_tcpsocket::sl_tcpsocket()
-:_svrfd(NULL), m_is_connected_to_proxy(false), m_socket(INVALIDATE_SOCKET)
+sl_tcpsocket::sl_tcpsocket(bool iswrapper)
+:/*_svrfd(NULL),*/ m_iswrapper(iswrapper),
+	m_is_connected_to_proxy(false), 
+	m_socket(INVALIDATE_SOCKET)
 {
     // Nothing
 }
+sl_tcpsocket::sl_tcpsocket(SOCKET_T so, bool iswrapper)
+	: m_iswrapper(iswrapper),
+	m_is_connected_to_proxy(false),
+	m_socket(so)
+{
+	// Nothing
+}
 sl_tcpsocket::~sl_tcpsocket()
 {
-    this->close();
+	if ( m_iswrapper == false ) {
+   		this->close();
+	}
 }
 
 // Connect to peer
@@ -262,9 +273,11 @@ bool sl_tcpsocket::listen( u_int32_t port, u_int32_t ipaddr )
         SL_NETWORK_CLOSESOCK( m_socket );
         return false;
     }
+	/*
     _svrfd = (struct pollfd *)calloc(1, sizeof(struct pollfd));
     _svrfd->events = POLLIN | POLLPRI;
     _svrfd->fd = m_socket;
+	*/
     this->set_reusable();
     return true;
 }
@@ -274,13 +287,16 @@ void sl_tcpsocket::close()
     if ( SOCKET_NOT_VALIDATE(m_socket) ) return;
     SL_NETWORK_CLOSESOCK(m_socket);
     m_socket = INVALIDATE_SOCKET;
+	/*
     if ( _svrfd != NULL ) {
         free( _svrfd );
         _svrfd = NULL;
     }
+	*/
 }
 // When the socket is a listener, use this method 
 // to accept client's connection.
+/*
 sl_socket *sl_tcpsocket::get_client( u_int32_t timeout )
 {
     if ( _svrfd == NULL ) return NULL;
@@ -317,6 +333,7 @@ void sl_tcpsocket::release_client( sl_socket *client )
     if ( client == NULL ) return;
     delete client;
 }
+*/
 
 // Try to get the original destination
 bool sl_tcpsocket::get_original_dest( string &address, u_int32_t &port )
