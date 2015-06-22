@@ -22,6 +22,10 @@
 
 #include "tcpsocket.h"
 #include <memory>
+#if SL_TARGET_LINUX
+#include <limits.h>
+#include <linux/netfilter_ipv4.h>
+#endif
 
 sl_tcpsocket::sl_tcpsocket(bool iswrapper)
 :/*_svrfd(NULL),*/ m_iswrapper(iswrapper),
@@ -342,7 +346,7 @@ bool sl_tcpsocket::get_original_dest( string &address, u_int32_t &port )
     struct sockaddr_in _dest_addr;
     socklen_t _socklen = sizeof(_dest_addr);
     int _error = getsockopt( m_socket, SOL_IP, SO_ORIGINAL_DST, &_dest_addr, &_socklen );
-    if ( error ) return false;
+    if ( _error ) return false;
     u_int32_t _ipaddr = _dest_addr.sin_addr.s_addr;
     port = ntohs(_dest_addr.sin_port);
     network_int_to_ipaddress( _ipaddr, address );
