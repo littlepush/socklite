@@ -181,6 +181,11 @@ void sl_poller::monitor_socket( SOCKET_T so ) {
 #endif
 }
 
+sl_poller &sl_poller::server() {
+	static sl_poller _g_poller;
+	return _g_poller;
+}
+
 /*
  Push Chen.
  littlepush@gmail.com

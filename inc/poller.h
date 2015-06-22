@@ -69,8 +69,9 @@ protected:
 	std::map<SOCKET_T, bool>	m_tcp_svr_map;
 	std::map<SOCKET_T, bool>	m_udp_svr_map;
 
-public:
+protected:
 	sl_poller();
+public:
 	~sl_poller();
 
 	// Bind the server side socket
@@ -82,6 +83,9 @@ public:
 
 	// Start to monitor a socket hander
 	void monitor_socket( SOCKET_T so );
+
+	// Singleton Poller Item
+	static sl_poller &server();
 };
 
 #endif
