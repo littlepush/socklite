@@ -37,6 +37,7 @@
 #endif
 
 #include <vector>
+#include <map>
 
 #define CO_MAX_SO_EVENTS		1024
 
@@ -48,7 +49,9 @@ enum SL_EVENT_ID {
 
 typedef struct tag_sl_event {
 	SOCKET_T				so;
+	SOCKET_T				source;
 	SL_EVENT_ID				event;
+	int						socktype;
 } sl_event;
 
 class sl_poller
@@ -63,8 +66,8 @@ protected:
 	struct kevent		*m_events;
 #endif
 
-	SOCKET_T			m_tcp_svr_so;
-	SOCKET_T			m_udp_svr_so;
+	std::map<SOCKET_T, bool>	m_tcp_svr_map;
+	std::map<SOCKET_T, bool>	m_udp_svr_map;
 
 public:
 	sl_poller();
@@ -82,3 +85,10 @@ public:
 };
 
 #endif
+
+/*
+ Push Chen.
+ littlepush@gmail.com
+ http://pushchen.com
+ http://twitter.com/littlepush
+ */

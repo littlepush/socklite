@@ -269,7 +269,7 @@ bool sl_tcpsocket::listen( u_int32_t port, u_int32_t ipaddr )
     _sock_addr.sin_port = htons(port);
     _sock_addr.sin_addr.s_addr = htonl(ipaddr);
 
-    if ( bind(m_socket, (struct sockaddr *)&_sock_addr, sizeof(_sock_addr)) == -1 ) {
+    if ( ::bind(m_socket, (struct sockaddr *)&_sock_addr, sizeof(_sock_addr)) == -1 ) {
         SL_NETWORK_CLOSESOCK( m_socket );
         return false;
     }

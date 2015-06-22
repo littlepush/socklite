@@ -23,7 +23,7 @@
 #include "poller.h"
 
 sl_poller::sl_poller()
-	:m_fd(-1), m_events(NULL), m_tcp_svr_so(-1), m_udp_svr_so(-1)
+	:m_fd(-1), m_events(NULL)
 {
 #if SL_TARGET_LINUX
 	m_fd = epoll_create1(0);
@@ -50,11 +50,35 @@ sl_poller::~sl_poller() {
 }
 
 void sl_poller::bind_tcp_server( SOCKET_T so ) {
-	m_tcp_svr_so = so;
+	m_tcp_svr_map[so] = true;
+	unsigned long _u = 1;
+	SL_NETWORK_IOCTL_CALL(so, FIONBIO, &_u);
+#if SL_TARGET_LINUX
+	struct epoll_event _e;
+	_e.data.fd = so;
+	_e.events = EPOLLIN | EPOLLET;
+	epoll_ctl( m_fd, EPOLL_CTL_ADD, so, &_e );
+#elif SL_TARGET_MAC
+	struct kevent _e;
+	EV_SET(&_e, so, EVFILT_READ, EV_ADD, 0, 0, NULL);
+	kevent(m_fd, &_e, 1, NULL, 0, NULL);
+#endif
 }
 
 void sl_poller::bind_udp_server( SOCKET_T so ) {
-	m_udp_svr_so = so;
+	m_udp_svr_map[so] = true;
+	unsigned long _u = 1;
+	SL_NETWORK_IOCTL_CALL(so, FIONBIO, &_u);
+#if SL_TARGET_LINUX
+	struct epoll_event _e;
+	_e.data.fd = so;
+	_e.events = EPOLLIN | EPOLLET;
+	epoll_ctl( m_fd, EPOLL_CTL_ADD, so, &_e );
+#elif SL_TARGET_MAC
+	struct kevent _e;
+	EV_SET(&_e, so, EVFILT_READ, EV_ADD, 0, 0, NULL);
+	kevent(m_fd, &_e, 1, NULL, 0, NULL);
+#endif
 }
 
 size_t sl_poller::fetch_events( sl_poller::earray &events, unsigned int timedout ) {
@@ -74,6 +98,7 @@ size_t sl_poller::fetch_events( sl_poller::earray &events, unsigned int timedout
 		struct kevent *_pe = m_events + i;
 #endif
 		sl_event _e;
+		_e.socktype = IPPROTO_TCP;
 		// Disconnected
 #if SL_TARGET_LINUX
 		if ( _pe->events & EPOLLERR || _pe->events & EPOLLHUP ) {
@@ -87,21 +112,23 @@ size_t sl_poller::fetch_events( sl_poller::earray &events, unsigned int timedout
 			continue;
 		}
 #if SL_TARGET_LINUX
-		else if ( _pe->data.fd == m_tcp_svr_so ) {
+		else if ( m_tcp_svr_map.find(_pe->data.fd) != m_tcp_svr_map.end() ) {
+			_e.source = _pe->data.fd;
 #elif SL_TARGET_MAC
-		else if ( _pe->ident == m_tcp_svr_so ) {
+		else if ( m_tcp_svr_map.find(_pe->ident) != m_tcp_svr_map.end()  ) {
+			_e.source = _pe->ident;
 #endif
 			// Incoming
 			while ( true ) {
 				struct sockaddr _inaddr;
 				socklen_t _inlen;
-				SOCKET_T _inso = accept( m_tcp_svr_so, &_inaddr, &_inlen );
+				SOCKET_T _inso = accept( _e.source, &_inaddr, &_inlen );
 				if ( _inso == -1 ) {
 					// No more incoming
 					if ( errno == EAGAIN || errno == EWOULDBLOCK ) break;
 					// On error
 					_e.event = SL_EVENT_FAILED;
-					_e.so = m_tcp_svr_so;
+					_e.so = _e.source;
 					events.push_back(_e);
 					break;
 				} else {
@@ -117,9 +144,9 @@ size_t sl_poller::fetch_events( sl_poller::earray &events, unsigned int timedout
 			}
 		}
 #if SL_TARGET_LINUX
-		else if ( _pe->data.fd == m_udp_svr_so ) {
+		else if ( m_udp_svr_map.find(_pe->data.fd) != m_udp_svr_map.end() ) {
 #elif SL_TARGET_MAC
-		else if ( _pe->ident == m_udp_svr_so ) {
+		else if ( m_udp_svr_map.find(_pe->ident) != m_udp_svr_map.end() ) {
 #endif
 			// Nothing now...
 		}
@@ -153,3 +180,10 @@ void sl_poller::monitor_socket( SOCKET_T so ) {
 	kevent(m_fd, &_ke, 1, NULL, 0, NULL);
 #endif
 }
+
+/*
+ Push Chen.
+ littlepush@gmail.com
+ http://pushchen.com
+ http://twitter.com/littlepush
+ */

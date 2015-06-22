@@ -228,8 +228,8 @@ public:
     virtual void close() = 0;
     // When the socket is a listener, use this method 
     // to accept client's connection.
-    virtual sl_socket *get_client( u_int32_t timeout = 100 ) = 0;
-    virtual void release_client( sl_socket *client ) = 0;
+    //virtual sl_socket *get_client( u_int32_t timeout = 100 ) = 0;
+    //virtual void release_client( sl_socket *client ) = 0;
 
     // Set current socket reusable or not
     virtual bool set_reusable( bool reusable = true ) = 0;

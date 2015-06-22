@@ -60,7 +60,7 @@ bool sl_udpsocket::listen( u_int32_t port, u_int32_t ipaddr )
     m_sock_addr.sin_family = AF_INET;
     m_sock_addr.sin_port = htons(port);
     m_sock_addr.sin_addr.s_addr = htonl(ipaddr);
-    if ( bind(m_socket, (struct sockaddr *)&m_sock_addr, sizeof(m_sock_addr)) == -1 ) {
+    if ( ::bind(m_socket, (struct sockaddr *)&m_sock_addr, sizeof(m_sock_addr)) == -1 ) {
         SL_NETWORK_CLOSESOCK(m_socket);
         return false;
     }
@@ -80,7 +80,7 @@ sl_socket* sl_udpsocket::get_client( u_int32_t timeout )
     if ( m_socket == INVALIDATE_SOCKET ) return NULL;
 
     // Set recv timeout
-    struct timeval _tv = { timeout / 1000, timeout % 1000 * 1000 };
+    struct timeval _tv = { (int)timeout / 1000, (int)timeout % 1000 * 1000 };
     if ( setsockopt( m_socket, SOL_SOCKET, SO_RCVTIMEO, &_tv, sizeof(_tv) ) == -1 ) return NULL;
 
     // Wait to receive data.
@@ -125,7 +125,7 @@ bool sl_udpsocket::read_data( string &buffer, u_int32_t timeout )
     if ( SOCKET_NOT_VALIDATE(m_socket) ) return false;
 
     // Set the receive time out
-    struct timeval _tv = { timeout / 1000, timeout % 1000 * 1000 };
+    struct timeval _tv = { (int)timeout / 1000, (int)timeout % 1000 * 1000 };
     if ( setsockopt( m_socket, SOL_SOCKET, SO_RCVTIMEO, &_tv, sizeof(_tv) ) == -1)
         return false;
 

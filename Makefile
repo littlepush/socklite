@@ -25,7 +25,7 @@
 SL_ROOT = ./
 OUT_DIR = $(SL_ROOT)/result
 
-SL_DEFINES = -DVERSION=\"$(shell ./version)\" -DTARGET=\"$(shell gcc -v 2> /dev/stdout | grep Target | cut -d ' ' -f 2)\"
+SL_DEFINES = -DVERSION=\"$(shell ./version)\" -DTARGET=\"$(shell gcc -v 2> /dev/stdout | grep Target | cut -d ' ' -f 2)\" -std=c++11
 THIRDPARTY = -I./inc
 
 ifeq "$(MAKECMDGOALS)" "release"
@@ -44,8 +44,8 @@ else
 	else
 		DEFINES = $(SL_DEFINES) $(THIRDPARTY) -DSL_RELEASE -DRELEASE
 		CPPFLAGS =
-		CFLAGS = -O2 -Wall $(DEFINES) -fPIC
-		CXXFLAGS = -O2 -Wall $(DEFINES) -fPIC
+		CFLAGS = -g -Wall $(DEFINES) -fPIC
+		CXXFLAGS = -g -Wall $(DEFINES) -fPIC
 		CMDGOAL_DEF := $(MAKECMDGOALS)
 	endif
 endif
@@ -59,12 +59,14 @@ CXX	 = g++
 AR	 = ar
 
 CPP_FILES = $(wildcard ./src/*.cpp)
+TEST_FCPP = $(wildcard ./test/*.cpp)
 OBJ_FILES = $(CPP_FILES:.cpp=.o)
+TEST_FOBJ = $(TEST_FCPP:.cpp=.o)
 
 STATIC_LIBS = 
 DYNAMIC_LIBS = libsocklite.so
 EXECUTABLE = 
-TEST_CASE = 
+TEST_CASE = tinydst
 RELAY_OBJECT = 
 
 all	: PreProcess $(STATIC_LIBS) $(DYNAMIC_LIBS) $(EXECUTABLE) $(TEST_CASE) AfterMake
@@ -88,8 +90,8 @@ clean :
 	rm -vf src/*.o; rm -rf $(OUT_DIR)
 
 AfterMake : 
-	rm -vf src/*.o;
-	mv -vf $(SL_ROOT)/libsocklite.so $(OUT_DIR)/dynamic/libsocklite.so.$(shell ./version)
+	@if [ "$(MAKECMDGOALS)" == "release" ]; then rm -vf src/*.o; fi
+	@mv -vf $(SL_ROOT)/libsocklite.so $(OUT_DIR)/dynamic/libsocklite.so.$(shell ./version)
 
 install :
 	mkdir -p /usr/local/include/sl 
@@ -111,6 +113,12 @@ withpg : PreProcess $(STATIC_LIBS) $(DYNAMIC_LIBS) $(EXECUTABLE) $(TEST_CASE) Af
 %.o: src/%.cpp
 	$(CC) $(CXXFLAGS) -c -o $@ $<
 
+tinydst.o: test/%.cpp
+	$(CC) $(CXXFLAGS) -c -o tinydst.o
+
 libsocklite.so : $(OBJ_FILES)
 	$(CC) -shared -o $@ $^
+
+tinydst : $(OBJ_FILES) $(TEST_FOBJ)
+	$(CC) -o $@ $^ $(CXXFLAGS) -std=c++11
 

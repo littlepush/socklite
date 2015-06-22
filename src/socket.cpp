@@ -109,7 +109,7 @@ SOCKETSTATUE socket_check_status( SOCKET_T hSo, SOCKETOPT option, u_int32_t wait
     FD_ZERO( &_fs );
     FD_SET( hSo, &_fs );
 
-    int _ret = 0; struct timeval _tv = {waitTime / 1000, waitTime % 1000 * 1000};
+    int _ret = 0; struct timeval _tv = {(int32_t)waitTime / 1000, (int32_t)waitTime % 1000 * 1000};
 
     if ( option & SO_CHECK_READ ) {
         do {
