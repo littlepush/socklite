@@ -39,6 +39,42 @@ using namespace std;
 #define ref		shared_ptr
 #define aoc		make_shared
 
+void sl_printhex(const char *data, unsigned int length, FILE *output = stdout) {
+	const static unsigned int _cPerLine = 16;
+	const static unsigned int _addrSize = sizeof(intptr_t) * 2 + 2;
+	const static unsigned int _bufferSize = _cPerLine * 4 + 3 + _addrSize + 2;
+	unsigned int _lines = ( length / _cPerLine ) + (unsigned int)((length % _cPerLine) > 0);
+	unsigned int _lastLineSize = (_lines == 1) ? length : length % _cPerLine;
+	if ( _lastLineSize == 0 ) _lastLineSize = _cPerLine;
+	char _bufferLine[_bufferSize];
+
+	for ( unsigned int _l = 0; _l < _lines; ++_l ) {
+		unsigned int _lineSize = (_l == _lines - 1) ? _lastLineSize : _cPerLine;
+		memset( _bufferLine, 0x20, _bufferSize );	// all space
+		if ( sizeof(intptr_t) == 4 ) {
+			sprintf(_bufferLine, "%08x: ", (unsigned int)(intptr_t)(data + (_l * _cPerLine)));
+		} else {
+			sprintf(_bufferLine, "%016lx: ", (unsigned long)(intptr_t)(data + (_l * _cPerLine)));
+		}
+
+		for ( uint32_t _c = 0; _c < _lineSize; ++_c ) {
+			sprintf( _bufferLine + _c * 3 + _addrSize, "%02x ",
+					(unsigned char)data[_l * _cPerLine + _c]);
+			_bufferLine[ (_c + 1) * 3 + _addrSize ] = ' ';
+			_bufferLine[ _cPerLine * 3 + 1 + _c + _addrSize + 1 ] = 
+				( (isprint((unsigned char)(data[_l * _cPerLine + _c])) ?
+				   data[_l * _cPerLine + _c] : '.')
+				);
+		}
+		_bufferLine[ _cPerLine * 3 + _addrSize ] = '\t';
+		_bufferLine[ _cPerLine * 3 + _addrSize + 1] = '|';
+		_bufferLine[ _bufferSize - 3 ] = '|';
+		_bufferLine[ _bufferSize - 2 ] = '\0';
+
+		fprintf(output, "%s\n", _bufferLine);
+	}
+}
+
 // System Handler
 static mutex& __global_mutex() {
 	static mutex __gm;
@@ -135,6 +171,8 @@ static void sl_socks5_handshake(SOCKET_T so) {
 		_wrapso.close();
 		return;
 	}
+	cout << "Receive Handshake" << endl;
+	sl_printhex(_buffer.data(), _buffer.size());
 
 	if ( _buffer.size() < sizeof(sl_socks5_noauth_request) ) {
 		_wrapso.close();
@@ -146,6 +184,9 @@ static void sl_socks5_handshake(SOCKET_T so) {
 	string _respdata;
 	if ( _req->nmethods != 1 ) {
 		_respdata.append((char *)&_resp, sizeof(_resp));
+		cout << "Too many methods" << endl;
+		cout << "Response: " << endl;
+		sl_printhex(_respdata.data(), _respdata.size());
 		_wrapso.write_data(_respdata);
 		_wrapso.close();
 		return;
@@ -155,10 +196,12 @@ static void sl_socks5_handshake(SOCKET_T so) {
 	bool _should_close = false;
 	if ( _method == sl_method_noauth ) {
 		// Noauth
+		cout << "No Auth Request" << endl;
 		_resp.method = sl_method_noauth;
 	} else if ( _method == sl_method_userpwd ) {
 		// user name password
 		// Check the user name & password
+		cout << "Need username/password auth" << endl;
 		size_t _s = _buffer.size() - sizeof(sl_socks5_userpwd_request);
 		const char *_data = _buffer.data() + sizeof(sl_socks5_userpwd_request);
 		string _username, _password;
@@ -180,6 +223,8 @@ static void sl_socks5_handshake(SOCKET_T so) {
 		_should_close = true;
 	}
 	_respdata.append((char *)&_resp, sizeof(_resp));
+	cout << "Response: " << endl;
+	sl_printhex(_respdata.data(), _respdata.size());
 	_wrapso.write_data(_respdata);
 	if ( _should_close ) {
 		_wrapso.close();
@@ -191,6 +236,8 @@ static void sl_socks5_handshake(SOCKET_T so) {
 		_wrapso.close();
 		return;
 	}
+	cout << "Receive command: " << endl;
+	sl_printhex(_buffer.data(), _buffer.size());
 	if ( _buffer.size() < sizeof(sl_socks5_connect_request) ) {
 		_wrapso.close();
 		return;
@@ -199,6 +246,7 @@ static void sl_socks5_handshake(SOCKET_T so) {
 	sl_socks5_ipv4_response _connect_resp(0, 0);
 	_respdata = "";
 	if ( _connect_req->cmd != sl_socks5cmd_connect ) {
+		cout << "Command is not connect" << endl;
 		_connect_resp.rep = sl_socks5rep_notsupport;
 		_should_close = true;
 	}
@@ -208,21 +256,25 @@ static void sl_socks5_handshake(SOCKET_T so) {
 	if ( !_should_close ) {
 		if ( _connect_req->atyp == sl_socks5atyp_ipv4 ) {
 			// Get ip address 
+			cout << "address type is ipv4" << endl;
 			uint32_t _ip = *(uint32_t *)(_buffer.data() + sizeof(sl_socks5_connect_request));
 			_ip = ntohl(_ip);
 			network_int_to_ipaddress(_ip, _addr);
 			_port = *(uint16_t *)(_buffer.data() + sizeof(sl_socks5_connect_request) + sizeof(uint32_t));
 		} else if ( _connect_req->atyp == sl_socks5atyp_dname ) {
 			// Get domain
+			cout << "address type is domain name" << endl;
 			const char *_d = _buffer.data() + sizeof(sl_socks5_connect_request);
 			size_t _ds = _buffer.size() - sizeof(sl_socks5_connect_request);
 			if ( ! sl_getstring(_d, _ds, _addr) ) {
 				_connect_resp.rep = sl_socks5rep_erroraddress;
 				_should_close = true;
 			} else {
+				cout << "Failed to get domain" << endl;
 				_port = *(uint16_t *)(_d + 1 + _addr.size());
 			}
 		} else {
+			cout << "address type is not supported" << endl;
 			_connect_resp.rep = sl_socks5rep_erroraddress;
 			_should_close = true;
 		}
@@ -230,7 +282,9 @@ static void sl_socks5_handshake(SOCKET_T so) {
 	if ( !_should_close ) {
 		// Connect to dst 
 		sl_tcpsocket _wrapdst(true);
+		cout << "Try to connect to dst: " << _addr << ":" << ntohs(_port) << endl;
 		if ( _wrapdst.connect(_addr, ntohs(_port)) == false ) {
+			cout << "failed to connect to dst" << endl;
 			_connect_resp.rep = sl_socks5rep_unreachable;
 			_should_close = true;
 		} else {
@@ -245,6 +299,8 @@ static void sl_socks5_handshake(SOCKET_T so) {
 		}
 	}
 	_respdata.append((char *)&_connect_resp, sizeof(_connect_resp));
+	cout << "Response: " << endl;
+	sl_printhex(_respdata.data(), _respdata.size());
 	_wrapso.write_data(_respdata);
 	if ( _should_close ) _wrapso.close();
 }
@@ -268,6 +324,8 @@ void loop_worker(mutex *m, bool *st) {
 				string _buf;
 				sl_tcpsocket _wso(_e.so);
 				if ( _wso.read_data(_buf) ) {
+					cout << "data: " << endl;
+					sl_printhex(_buf.data(), _buf.size());
 					sl_tcpsocket _wrso(sl_somap()[_e.so]);
 					_wrso.write_data(_buf);
 				}
