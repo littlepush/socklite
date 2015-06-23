@@ -117,8 +117,8 @@ struct sl_socks5_userpwd_request : public sl_socks5_handshake_request {
 struct sl_socks5_handshake_response : public sl_socks5_package {
 	uint8_t		method;
 
-	sl_socks5_handshake_response() {}
-	sl_socks5_handshake_response(sl_methods m) : method(m) { }
+	sl_socks5_handshake_response() : sl_socks5_package() {}
+	sl_socks5_handshake_response(sl_methods m) : sl_socks5_package(), method(m) { }
 };
 
 struct sl_socks5_connect_request : public sl_socks5_package {
@@ -144,13 +144,15 @@ struct sl_socks5_connect_response : public sl_socks5_package {
 	uint8_t		rep;
 	uint8_t		rsv;
 	uint8_t		atyp;
+
+	sl_socks5_connect_response() : sl_socks5_package() {}
 };
 
 struct sl_socks5_ipv4_response : public sl_socks5_connect_response {
 	uint32_t	ip;
 	uint16_t	port;
 
-	sl_socks5_ipv4_response() {}
+	sl_socks5_ipv4_response(): sl_socks5_connect_response() {}
 	sl_socks5_ipv4_response(uint32_t addr, uint16_t p):
 		sl_socks5_connect_response(), 
 		ip(addr),
