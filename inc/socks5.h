@@ -58,7 +58,7 @@ enum sl_socks5rep {
 	sl_socks5rep_erroraddress		= 8,	// Address type not supported
 };
 
-const char *sl_socks5msg(sl_socks5rep rep) {
+static inline const char *sl_socks5msg(sl_socks5rep rep) {
 	static const char * _gmsg[] = {
 		"successed",
 		"general SOCKS server failure",
