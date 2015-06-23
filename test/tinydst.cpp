@@ -182,45 +182,15 @@ static void sl_socks5_handshake(SOCKET_T so) {
 	sl_socks5_handshake_request *_req = (sl_socks5_handshake_request *)_buffer.data();
 	sl_socks5_handshake_response _resp(sl_method_nomethod);
 	string _respdata;
-	if ( _req->nmethods != 1 ) {
-		_respdata.append((char *)&_resp, sizeof(_resp));
-		cout << "Too many methods" << endl;
-		cout << "Response: " << endl;
-		sl_printhex(_respdata.data(), _respdata.size());
-		_wrapso.write_data(_respdata);
-		_wrapso.close();
-		return;
-	}
-
-	uint8_t _method = (_buffer.data() + sizeof(sl_socks5_handshake_request))[0];
-	bool _should_close = false;
-	if ( _method == sl_method_noauth ) {
-		// Noauth
-		cout << "No Auth Request" << endl;
-		_resp.method = sl_method_noauth;
-	} else if ( _method == sl_method_userpwd ) {
-		// user name password
-		// Check the user name & password
-		cout << "Need username/password auth" << endl;
-		size_t _s = _buffer.size() - sizeof(sl_socks5_userpwd_request);
-		const char *_data = _buffer.data() + sizeof(sl_socks5_userpwd_request);
-		string _username, _password;
-		if ( !sl_getstring(_data, _s, _username) ) {
-			_should_close = true;
-		} else {
-			_data += (_username.size() + 1);
-			_s -= (_username.size() + 1);
-			if ( !sl_getstring(_data, _s, _password) ) {
-				_should_close = true;
-			}
+	const char *_methods = (_buffer.data() + sizeof(sl_socks5_handshake_request));
+	bool _should_close = true;
+	for ( uint8_t i = 0; i < _req->nmethods; ++i ) {
+		if ( _methods[i] == sl_method_noauth ) {
+			cout << "Ask for noauth, we support" << endl;
+			_resp.method = sl_method_noauth;
+			_should_close = false;
+			break;
 		}
-		if ( !_should_close ) {
-			_resp.method = sl_method_userpwd;
-			cout << "New connect, auth by username/password: " << _username << "/" << _password << endl;
-		}
-	} else {
-		// not support yet
-		_should_close = true;
 	}
 	_respdata.append((char *)&_resp, sizeof(_resp));
 	cout << "Response: " << endl;
@@ -323,8 +293,11 @@ void loop_worker(mutex *m, bool *st) {
 				string _buf;
 				sl_tcpsocket _wso(_e.so);
 				if ( _wso.read_data(_buf) ) {
-					cout << "data: " << endl;
-					sl_printhex(_buf.data(), _buf.size());
+					string _head(_buf.c_str(), 4);
+					if ( _buf.size() > 0 && !(_head == "HTTP" || _head == "GET " || _head == "POST") ) {
+						cout << "data: " << endl;
+						sl_printhex(_buf.data(), _buf.size());
+					}
 					sl_tcpsocket _wrso(sl_somap()[_e.so]);
 					_wrso.write_data(_buf);
 				}
