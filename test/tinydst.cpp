@@ -258,7 +258,7 @@ static void sl_socks5_handshake(SOCKET_T so) {
 			// Get ip address 
 			cout << "address type is ipv4" << endl;
 			uint32_t _ip = *(uint32_t *)(_buffer.data() + sizeof(sl_socks5_connect_request));
-			_ip = ntohl(_ip);
+			//_ip = ntohl(_ip);
 			network_int_to_ipaddress(_ip, _addr);
 			_port = *(uint16_t *)(_buffer.data() + sizeof(sl_socks5_connect_request) + sizeof(uint32_t));
 		} else if ( _connect_req->atyp == sl_socks5atyp_dname ) {
@@ -318,8 +318,7 @@ void loop_worker(mutex *m, bool *st) {
 					sl_unbind_relay(_e.so);
 				}
 			} else if ( _e.event == SL_EVENT_ACCEPT ) {
-				thread _handshake(sl_socks5_handshake, _e.so);
-				_handshake.join();
+				sl_socks5_handshake(_e.so);
 			} else {
 				string _buf;
 				sl_tcpsocket _wso(_e.so);
