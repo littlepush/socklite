@@ -139,7 +139,7 @@ size_t sl_poller::fetch_events( sl_poller::earray &events, unsigned int timedout
 					_e.so = _inso;
 					events.push_back(_e);
 					// Add to poll monitor
-					this->monitor_socket(_inso);
+					// this->monitor_socket(_inso);
 				}
 			}
 		}

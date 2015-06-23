@@ -27,6 +27,8 @@
 #include <linux/netfilter_ipv4.h>
 #endif
 
+#include "socks5.h"
+
 sl_tcpsocket::sl_tcpsocket(bool iswrapper)
 :/*_svrfd(NULL),*/ m_iswrapper(iswrapper),
 	m_is_connected_to_proxy(false), 
@@ -133,30 +135,23 @@ bool sl_tcpsocket::setup_proxy( const string &socks5_addr, u_int32_t socks5_port
 		fprintf(stderr, "failed to connect to the socks5 proxy server\n");
 		return false;
 	}
-
-    char _buffer[3], _recv_buffer[2];
-
-    // Set up sending information to the socks proxy
-    _buffer[0] = 0x05;           /* VER */
-    _buffer[1] = 0x01;           /* NMETHODS */
-    _buffer[2] = 0x00;           /* METHODS */
-
+	
+	sl_socks5_noauth_request _req;
     // Exchange version info
-    if (write(m_socket, &_buffer, sizeof(_buffer)) < 0) {
+    if (write(m_socket, (char *)&_req, sizeof(_req)) < 0) {
         this->close();
         return false;
     }
 
-    if (read(m_socket, &_recv_buffer, sizeof(_recv_buffer)) == -1) {
+	sl_socks5_handshake_response _resp;
+    if (read(m_socket, (char *)&_resp, sizeof(_resp)) == -1) {
         this->close();
         return false;
     }
 
-    // Now we just support NO AUTH for the socks proxy.
-    // So if the server doesn't support it, we will disconnect
-    // from the server.
-    if (_recv_buffer[1] != 0x00) {
-        cerr << "Unsupported Authentication Method";
+	// This api is for no-auth proxy
+	if ( _resp.ver != 0x05 && _resp.method != sl_method_noauth ) {
+		fprintf(stderr, "unsupported authentication method\n");
         this->close();
         return false;
     }
@@ -166,30 +161,77 @@ bool sl_tcpsocket::setup_proxy( const string &socks5_addr, u_int32_t socks5_port
     return true;
 }
 
+bool sl_tcpsocket::setup_proxy(
+		const string &socks5_addr, u_int32_t socks5_port,
+		const string &username, const string &password) 
+{
+	// Connect to socks 5 proxy
+	if ( ! this->_internal_connect( socks5_addr, socks5_port ) ) {
+		fprintf(stderr, "failed to connect to the socks5 proxy server\n");
+		return false;
+	}
+
+	sl_socks5_userpwd_request _req;
+	char *_buf = (char *)malloc(sizeof(_req) + username.size() + password.size() + 2);
+	memcpy(_buf, (char *)&_req, sizeof(_req));
+	int _index = sizeof(_req);
+	_buf[_index] = (uint8_t)username.size();
+	_index += 1;
+	memcpy(_buf + _index, username.data(), username.size());
+	_index += username.size();
+	_buf[_index] = (uint8_t)password.size();
+	_index += 1;
+	memcpy(_buf + _index, password.data(), password.size());
+	_index += password.size();
+
+	// Send handshake package
+	if (write(m_socket, _buf, _index) < 0) {
+		this->close();
+		return false;
+	}
+	free(_buf);
+
+	sl_socks5_handshake_response _resp;
+	if (read(m_socket, (char *)&_resp, sizeof(_resp)) == -1 ) {
+		this->close();
+		return false;
+	}
+
+	// Check if server support username/password
+	if ( _resp.ver != 0x05 && _resp.method != sl_method_userpwd ) {
+		fprintf(stderr, "unspported username/password authentication method\n");
+		this->close();
+		return false;
+	}
+
+	// Now we has connected to the proxy server.
+	m_is_connected_to_proxy = true;
+	return true;
+}
+
 bool sl_tcpsocket::connect( const string &ipaddr, u_int32_t port )
 {
     if ( m_is_connected_to_proxy == false ) {
         return this->_internal_connect( ipaddr, port );
     } else {
         // Establish a connection through the proxy server.
-        u_int8_t _buffer[256] = {0}, _recv_buffer[256] = {0};
+        u_int8_t _buffer[256] = {0};
         // Socks info
-        u_int8_t _host_len = (u_int8_t)ipaddr.size();
         u_int16_t _host_port = htons((u_int16_t)port); // the port must be uint16
 
         /* Assemble the request packet */
-		_buffer[0] = 0x05;			// version
-		_buffer[1] = 0x01;			// command
-		_buffer[2] = 0x00;			// reserved;
-		_buffer[3] = 0x03;			// address type
-		unsigned int _pos = 4;
-		memcpy(_buffer + _pos, &_host_len, sizeof(_host_len));
-		_pos += sizeof(_host_len);
-        memcpy(_buffer + _pos, ipaddr.c_str(), ipaddr.size());
-        _pos += ipaddr.size();
-        memcpy(_buffer + _pos, &_host_port, sizeof(_host_port));
-        _pos += sizeof(_host_port);
+		sl_socks5_connect_request _req;
+		_req.atyp = sl_socks5atyp_dname;
+		memcpy(_buffer, (char *)&_req, sizeof(_req));
 
+		unsigned int _pos = sizeof(_req);
+		_buffer[_pos] = (uint8_t)ipaddr.size();
+		_pos += 1;
+		memcpy(_buffer + _pos, ipaddr.data(), ipaddr.size());
+		_pos += ipaddr.size();
+		memcpy(_buffer + _pos, &_host_port, sizeof(_host_port));
+		_pos += sizeof(_host_port);
+		
         if (write(m_socket, _buffer, _pos) == -1) {
             return false;
         }
@@ -203,55 +245,24 @@ bool sl_tcpsocket::connect( const string &ipaddr, u_int32_t port )
          * since as you can see below, we accept only ATYP == 1 which specifies
          * that the IPv4 address is in a binary format.
          */
-        if (read(m_socket, &_recv_buffer, 10) == -1) {
+		sl_socks5_ipv4_response _resp;
+        if (read(m_socket, (char *)&_resp, sizeof(_resp)) == -1) {
             return false;
         }
 
         /* Check the server's version. */
-        if (_recv_buffer[0] != 0x05) {
-            (void)fprintf(stderr, "Unsupported SOCKS version: %x\n", _recv_buffer[0]);
+		if ( _resp.ver != 0x05 ) {
+            (void)fprintf(stderr, "Unsupported SOCKS version: %x\n", _resp.ver);
             return false;
         }
-        int _is_failed = 1;
-        /* Check server's reply */
-        switch (_recv_buffer[1]) {
-            case 0x00:
-                _is_failed = 0;
-                break;
-            case 0x01:
-                fprintf(stderr, "General SOCKS server failure.\n");
-                break;
-            case 0x02:
-                fprintf(stderr, "Connection not allowed by ruleset.\n");
-                break;
-            case 0x03:
-                fprintf(stderr, "Network Unreachable.\n");
-                break;
-            case 0x04:
-                fprintf(stderr, "Host unreachable.\n");
-                break;
-            case 0x05:
-                fprintf(stderr, "Connection refused.\n");
-                break;
-            case 0x06:
-                fprintf(stderr, "TTL expired.\n");
-                break;
-            case 0x07:
-                fprintf(stderr, "Command not supported.\n");
-                break;
-            case 0x08:
-                fprintf(stderr, "Address type not supported.\n");
-                break;
-            default:
-                fprintf(stderr, "ssh-socks5-proxy: SOCKS Server reply not understood\n");
-                break;
-        }
-
-        if (_is_failed == 1) return false;
+        if (_resp.rep != sl_socks5rep_successed) {
+			fprintf(stderr, "%s\n", sl_socks5msg((sl_socks5rep)_resp.rep));
+			return false;
+		}
 
         /* Check ATYP */
-        if (_recv_buffer[3] != 0x01) {
-            fprintf(stderr, "ssh-socks5-proxy: Address type not supported: %u\n", _recv_buffer[3]);
+		if ( _resp.atyp != sl_socks5atyp_ipv4 ) {
+            fprintf(stderr, "ssh-socks5-proxy: Address type not supported: %u\n", _resp.atyp);
             return false;
         }
         return true;

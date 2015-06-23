@@ -48,6 +48,8 @@ public:
 
     // Set up a socks5 proxy.
     bool setup_proxy( const string &socks5_addr, u_int32_t socks5_port );
+	bool setup_proxy( const string &socks5_addr, u_int32_t socks5_port,
+			const string &username, const string &password);
     // Connect to peer
     virtual bool connect( const string &ipaddr, u_int32_t port );
     // Listen on specified port and address, default is 0.0.0.0
