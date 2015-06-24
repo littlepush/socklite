@@ -1,0 +1,58 @@
+#!/bin/sh
+
+rm -rf dist
+mkdir dist
+
+fheader=dist/socketlite.h
+
+# Create include header file
+head -n 21 inc/socket.h > $fheader
+echo "// This is an amalgamate file for socketlite" >> $fheader
+echo "" >> $fheader
+echo "#pragma once" >> $fheader
+
+function split_headerfile() {
+	fname=$1
+	sp=$(cat $fname | grep -n "#if" | head -n 1 | awk -F":" '{print $1}')
+	ep=$(cat $fname | grep -n "#endif" | tail -n 1 | awk -F":" '{print $1}')
+	sed -n "${sp},${ep}p" $fname |
+		grep -v "#include \"socket.h\"" >> $fheader
+}
+
+headerfiles=("socket.h" "socks5.h" "poller.h" "tcpsocket.h" "udpsocket.h")
+
+for h in ${headerfiles[@]}; do
+	echo "// inc/${h}" >> $fheader
+	split_headerfile inc/${h}
+	echo "" >> $fheader
+done
+
+tail -n 8 inc/socket.h >> $fheader
+echo "// End of amalgamate file" >> $fheader
+
+fsource=dist/socketlite.cpp
+head -n 21 inc/socket.h > $fsource
+echo "// This is an amalgamate file for socketlite" >> $fsource
+echo "" >> $fsource
+echo "#include \"socketlite.h\"" >> $fsource
+
+function split_sourcefile() {
+	fname=$1
+	f=$(basename ${fname})
+	f=${f%%.*}
+	sp=$(cat $fname | grep -n "#include \"${f}.h\"" | awk -F":" '{print $1}')
+	sp=$((sp+1))
+	ep=$(cat $fname | wc -l)
+	sed -n "${sp},${ep}p" $fname |
+		grep -v "#include \"socks5.h\"" >> $fsource
+}
+
+sourcefiles=("socket.cpp" "poller.cpp" "tcpsocket.cpp" "udpsocket.cpp")
+
+for c in ${sourcefiles[@]}; do
+	echo "// src/${c}" >> $fsource
+	split_sourcefile src/${c}
+	echo "" >> $fsource
+done
+echo "// End of amalgamate file" >> $fsource
+

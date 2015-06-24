@@ -26,7 +26,6 @@
 #define __SOCK_LITE_TCPSOCKET_H__
 
 #include "socket.h"
-#include <poll.h>
 
 // Tcp socket for clean dns use.
 class sl_tcpsocket : public sl_socket
