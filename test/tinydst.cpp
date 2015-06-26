@@ -182,7 +182,8 @@ static void sl_socks5_handshake(SOCKET_T so) {
 	}
 
 	if ( _m == sl_method_userpwd ) {
-		bool _auth = sl_socks5_auth_by_username(so, [](const string &u, const string &p){ return true; });
+		sl_auth_method _fauth([](const string &u, const string &p)->bool{return true;});
+		bool _auth = sl_socks5_auth_by_username(so, _fauth);
 		if ( _auth == false ) {
 			close(so); return;
 		}

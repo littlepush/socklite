@@ -27,6 +27,8 @@
 
 #include "socket.h"
 
+#include <functional>
+
 enum sl_methods {
 	sl_method_noauth		= 0,
 	sl_method_gssapi		= 1,
@@ -165,7 +167,8 @@ struct sl_socks5_ipv4_response : public sl_socks5_connect_response {
 #pragma pack(pop)
 
 // The function point to auth a connection by username and password
-typedef bool (*sl_auth_method)(const string&, const string&);
+//typedef bool (*sl_auth_method)(const string&, const string&);
+using sl_auth_method = function<bool(const string &, const string &)>;
 
 // Setup the supported methods, can be invoke multiple times
 void sl_socks5_set_supported_method(sl_methods m);
