@@ -44,10 +44,11 @@ function split_sourcefile() {
 	sp=$((sp+1))
 	ep=$(cat $fname | wc -l)
 	sed -n "${sp},${ep}p" $fname |
-		grep -v "#include \"socks5.h\"" >> $fsource
+		grep -v "#include \"socks5.h\"" |
+		grep -v "#include \"tcpsocket.h\"" >> $fsource
 }
 
-sourcefiles=("socket.cpp" "poller.cpp" "tcpsocket.cpp" "udpsocket.cpp")
+sourcefiles=("socket.cpp" "poller.cpp" "tcpsocket.cpp" "udpsocket.cpp" "socks5.cpp")
 
 for c in ${sourcefiles[@]}; do
 	echo "// src/${c}" >> $fsource

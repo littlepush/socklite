@@ -164,6 +164,27 @@ struct sl_socks5_ipv4_response : public sl_socks5_connect_response {
 };
 #pragma pack(pop)
 
+// The function point to auth a connection by username and password
+typedef bool (*sl_auth_method)(const string&, const string&);
+
+// Setup the supported methods, can be invoke multiple times
+void sl_socks5_set_supported_method(sl_methods m);
+
+// Hand shake the new connection, if return nomethod, than should close the connection
+sl_methods sl_socks5_handshake_handler(SOCKET_T so);
+
+// Auth the connection by username and password
+bool sl_socks5_auth_by_username(SOCKET_T so, sl_auth_method auth);
+
+// Try to get the connection info
+bool sl_socks5_get_connect_info(SOCKET_T so, string &addr, uint16_t& port);
+
+// Failed to connect to peer
+void sl_socks5_failed_connect_to_peer(SOCKET_T so, sl_socks5rep rep);
+
+// After connect to peer, send a response to the incoming connection
+void sl_socks5_did_connect_to_peer(SOCKET_T so, uint32_t addr, uint16_t port);
+
 #endif // socklite.socks5.h
 
 /*

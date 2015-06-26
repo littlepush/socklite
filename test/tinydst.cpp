@@ -174,124 +174,36 @@ static bool sl_listen(sl_tcpsocket &svr, uint16_t port) {
 	return false;
 }
 
-static bool sl_getstring(const char *buf, unsigned int len, string &s) {
-	if ( len <= 1 ) return false;
-	uint8_t _sz = buf[0];
-	if ( len - 1 < _sz ) return false;
-	s.append(buf + 1, _sz);
-	return true;
-}
-
 // Accept new socks5 request
 static void sl_socks5_handshake(SOCKET_T so) {
-	sl_tcpsocket _wrapso(so);
-	string _buffer;
-	if ( _wrapso.read_data(_buffer) == false ) {
-		_wrapso.close();
-		return;
-	}
-	//cout << "Receive Handshake" << endl;
-	//sl_printhex(_buffer.data(), _buffer.size());
-
-	if ( _buffer.size() < sizeof(sl_socks5_noauth_request) ) {
-		_wrapso.close();
-		return;
+	sl_methods _m = sl_socks5_handshake_handler(so);
+	if ( _m == sl_method_nomethod ) {
+		close(so); return;
 	}
 
-	sl_socks5_handshake_request *_req = (sl_socks5_handshake_request *)_buffer.data();
-	sl_socks5_handshake_response _resp(sl_method_nomethod);
-	string _respdata;
-	const char *_methods = (_buffer.data() + sizeof(sl_socks5_handshake_request));
-	bool _should_close = true;
-	for ( uint8_t i = 0; i < _req->nmethods; ++i ) {
-		if ( _methods[i] == sl_method_noauth ) {
-			//cout << "Ask for noauth, we support" << endl;
-			_resp.method = sl_method_noauth;
-			_should_close = false;
-			break;
+	if ( _m == sl_method_userpwd ) {
+		bool _auth = sl_socks5_auth_by_username(so, [](const string &u, const string &p){ return true; });
+		if ( _auth == false ) {
+			close(so); return;
 		}
 	}
-	_respdata.append((char *)&_resp, sizeof(_resp));
-	//cout << "Response: " << endl;
-	//sl_printhex(_respdata.data(), _respdata.size());
-	_wrapso.write_data(_respdata);
-	if ( _should_close ) {
-		_wrapso.close();
-		return;
-	}
-
-	// Wait for connect command
-	if ( !_wrapso.read_data(_buffer) ) {
-		_wrapso.close();
-		return;
-	}
-	//cout << "Receive command: " << endl;
-	//sl_printhex(_buffer.data(), _buffer.size());
-	if ( _buffer.size() < sizeof(sl_socks5_connect_request) ) {
-		_wrapso.close();
-		return;
-	}
-	sl_socks5_connect_request *_connect_req = (sl_socks5_connect_request *)_buffer.data();
-	sl_socks5_ipv4_response _connect_resp(0, 0);
-	_respdata = "";
-	if ( _connect_req->cmd != sl_socks5cmd_connect ) {
-		//cout << "Command is not connect" << endl;
-		_connect_resp.rep = sl_socks5rep_notsupport;
-		_should_close = true;
-	}
-	// Get connection info
 	string _addr;
 	uint16_t _port;
-	if ( !_should_close ) {
-		if ( _connect_req->atyp == sl_socks5atyp_ipv4 ) {
-			// Get ip address 
-			//cout << "address type is ipv4" << endl;
-			uint32_t _ip = *(uint32_t *)(_buffer.data() + sizeof(sl_socks5_connect_request));
-			//_ip = ntohl(_ip);
-			network_int_to_ipaddress(_ip, _addr);
-			_port = *(uint16_t *)(_buffer.data() + sizeof(sl_socks5_connect_request) + sizeof(uint32_t));
-		} else if ( _connect_req->atyp == sl_socks5atyp_dname ) {
-			// Get domain
-			//cout << "address type is domain name" << endl;
-			const char *_d = _buffer.data() + sizeof(sl_socks5_connect_request);
-			size_t _ds = _buffer.size() - sizeof(sl_socks5_connect_request);
-			if ( ! sl_getstring(_d, _ds, _addr) ) {
-				_connect_resp.rep = sl_socks5rep_erroraddress;
-				_should_close = true;
-			} else {
-				//cout << "Failed to get domain" << endl;
-				_port = *(uint16_t *)(_d + 1 + _addr.size());
-			}
-		} else {
-			//cout << "address type is not supported" << endl;
-			_connect_resp.rep = sl_socks5rep_erroraddress;
-			_should_close = true;
-		}
+	if ( !sl_socks5_get_connect_info(so, _addr, _port) ) {
+		close(so); return;
 	}
-	if ( !_should_close ) {
-		// Connect to dst 
-		sl_tcpsocket _wrapdst(true);
-		//cout << "Try to connect to dst: " << _addr << ":" << ntohs(_port) << endl;
-		if ( _wrapdst.connect(_addr, ntohs(_port)) == false ) {
-			//cout << "failed to connect to dst" << endl;
-			_connect_resp.rep = sl_socks5rep_unreachable;
-			_should_close = true;
-		} else {
-			// Bind relay map
-			sl_bind_relay(_wrapso.m_socket, _wrapdst.m_socket);
-			_connect_resp.ip = network_domain_to_inaddr(_addr.c_str());
-			_connect_resp.port = _port;
 
-			// Add both socket to monitor
-			sl_poller::server().monitor_socket(_wrapso.m_socket);
-			sl_poller::server().monitor_socket(_wrapdst.m_socket);
-		}
+	sl_tcpsocket _wdst(true);
+	if ( _wdst.connect(_addr, _port) == false ) {
+		sl_socks5_failed_connect_to_peer(so, sl_socks5rep_unreachable);
+		close(so); return;
 	}
-	_respdata.append((char *)&_connect_resp, sizeof(_connect_resp));
-	//cout << "Response: " << endl;
-	//sl_printhex(_respdata.data(), _respdata.size());
-	_wrapso.write_data(_respdata);
-	if ( _should_close ) _wrapso.close();
+	sl_bind_relay(so, _wdst.m_socket);
+	sl_poller::server().monitor_socket(so);
+	sl_poller::server().monitor_socket(_wdst.m_socket);
+
+	// Send response package
+	sl_socks5_did_connect_to_peer(so, network_domain_to_inaddr(_addr.c_str()), _port);
 }
 
 void loop_worker(mutex *m, bool *st) {
