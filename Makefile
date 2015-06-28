@@ -87,7 +87,7 @@ cmdgoalError :
 	@echo '***************************************************'
 
 clean :
-	rm -vf src/*.o; rm -rf $(OUT_DIR)
+	rm -vf src/*.o; rm -vf test/*.o; rm -rf $(OUT_DIR)
 
 AfterMake : 
 	@if [ "$(MAKECMDGOALS)" == "release" ]; then rm -vf src/*.o; fi

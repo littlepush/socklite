@@ -385,7 +385,7 @@ bool sl_tcpsocket::set_keepalive( bool keepalive )
 }
 
 // Read data from the socket until timeout or get any data.
-bool sl_tcpsocket::read_data( string &buffer, u_int32_t timeout )
+bool sl_tcpsocket::read_data( string &buffer, u_int32_t timeout, SOCKETSTATUE *pst )
 {
     if ( SOCKET_NOT_VALIDATE(m_socket) ) return false;
 
@@ -422,6 +422,7 @@ bool sl_tcpsocket::read_data( string &buffer, u_int32_t timeout )
         do {
             // Check if the socket has more data to read
             SOCKETSTATUE _status = socket_check_status(m_socket, SO_CHECK_READ);
+			if ( pst != NULL ) *pst = _status;
             // Socket become invalidate
             if (_status == SO_INVALIDATE) 
             {

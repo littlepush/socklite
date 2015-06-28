@@ -120,7 +120,7 @@ bool sl_udpsocket::set_reusable( bool reusable )
 }
 
 // Read data from the socket until timeout or get any data.
-bool sl_udpsocket::read_data( string &buffer, u_int32_t timeout )
+bool sl_udpsocket::read_data( string &buffer, u_int32_t timeout, SOCKETSTATUE *pst )
 {
     if ( SOCKET_NOT_VALIDATE(m_socket) ) return false;
 
