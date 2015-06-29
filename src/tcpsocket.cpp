@@ -408,15 +408,26 @@ bool sl_tcpsocket::read_data( string &buffer, u_int32_t timeout, SOCKETSTATUE *p
         } while ( _retCode < 0 && errno == EINTR );
 
         if ( _retCode < 0 ) // Error
+		{
+			if ( pst != NULL ) *pst = SO_INVALIDATE;
             return false;
+		}
         if ( _retCode == 0 )    // TimeOut
+		{
+			if ( pst != NULL ) *pst = SO_IDLE;
             return true;
+		}
 
         // Get data from the socket cache
         _retCode = ::recv( m_socket, _buffer, 512, 0 );
         // Error happen when read data, means the socket has become invalidate
-        if ( _retCode < 0 ) return false;
-        if ( _retCode == 0 ) break; // Get EOF
+        if ( _retCode < 0 ) {
+			if ( pst != NULL ) *pst = SO_INVALIDATE;
+			return false;
+        if ( _retCode == 0 ) {
+			if ( pst != NULL ) *pst = SO_IDLE;
+			break; // Get EOF
+		}
         buffer.append( _buffer, _retCode );
 
         do {
