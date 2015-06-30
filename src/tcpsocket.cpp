@@ -385,9 +385,9 @@ bool sl_tcpsocket::set_keepalive( bool keepalive )
 }
 
 // Read data from the socket until timeout or get any data.
-bool sl_tcpsocket::read_data( string &buffer, u_int32_t timeout, SOCKETSTATUE *pst )
+SO_READ_STATUE sl_tcpsocket::read_data( string &buffer, u_int32_t timeout)
 {
-    if ( SOCKET_NOT_VALIDATE(m_socket) ) return false;
+    if ( SOCKET_NOT_VALIDATE(m_socket) ) return SO_READ_CLOSE;
 
     buffer = "";
     struct timeval _tv = { (long)timeout / 1000, 
@@ -398,7 +398,7 @@ bool sl_tcpsocket::read_data( string &buffer, u_int32_t timeout, SOCKETSTATUE *p
 
     // Buffer
     char _buffer[512] = { 0 };
-    int _idleLoopCount = 5;
+	SO_READ_STATUE _st = SO_READ_WAITING;
 
     do {
         // Wait for the incoming
@@ -408,52 +408,27 @@ bool sl_tcpsocket::read_data( string &buffer, u_int32_t timeout, SOCKETSTATUE *p
         } while ( _retCode < 0 && errno == EINTR );
 
         if ( _retCode < 0 ) // Error
-		{
-			if ( pst != NULL ) *pst = SO_INVALIDATE;
-            return false;
-		}
-        if ( _retCode == 0 )    // TimeOut
-		{
-			if ( pst != NULL ) *pst = SO_IDLE;
-            return true;
-		}
+            return (SO_READ_STATUE)(_st | SO_READ_CLOSE);
+        if ( _retCode == 0 )// TimeOut
+            return (SO_READ_STATUE)(_st | SO_READ_TIMEOUT);
 
         // Get data from the socket cache
         _retCode = ::recv( m_socket, _buffer, 512, 0 );
         // Error happen when read data, means the socket has become invalidate
-        if ( _retCode < 0 ) {
-			if ( pst != NULL ) *pst = SO_INVALIDATE;
-			return false;
-        if ( _retCode == 0 ) {
-			if ( pst != NULL ) *pst = SO_IDLE;
-			break; // Get EOF
+		// Or receive EOF, which should close the socket
+        if ( _retCode <= 0 ) {
+			return (SO_READ_STATUE)(_st | SO_READ_CLOSE);
 		}
+		_st = SO_READ_DONE;
         buffer.append( _buffer, _retCode );
 
-        do {
-            // Check if the socket has more data to read
-            SOCKETSTATUE _status = socket_check_status(m_socket, SO_CHECK_READ);
-			if ( pst != NULL ) *pst = _status;
-            // Socket become invalidate
-            if (_status == SO_INVALIDATE) 
-            {
-                if ( buffer.size() > 0 ) return true;
-                return false;
-            }
-            // Socket become idle, and already read some data, means the peer finish sending one
-            // package. We return the buffer and make the up-level to process the package.
-            //PDUMP(_idleLoopCount);
-            if (_status == SO_IDLE) {
-                //PDUMP( _idleLoopCount );
-				if ( buffer.size() > 0 ) return true;
-                if ( _idleLoopCount > 0 ) _idleLoopCount -= 1;
-                else return true;
-            } else break;
-        } while ( _idleLoopCount > 0 );
+		// If current buffer is not full, means current package just 
+		// end with _retCode bytes, so break current loop
+		if ( _retCode < 512 ) break;
     } while ( true );
 
     // Useless
-    return true;
+    return _st;
 }
 // Write data to peer.
 bool sl_tcpsocket::write_data( const string &data )

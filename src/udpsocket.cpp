@@ -120,14 +120,14 @@ bool sl_udpsocket::set_reusable( bool reusable )
 }
 
 // Read data from the socket until timeout or get any data.
-bool sl_udpsocket::read_data( string &buffer, u_int32_t timeout, SOCKETSTATUE *pst )
+SO_READ_STATUE sl_udpsocket::read_data( string &buffer, u_int32_t timeout )
 {
-    if ( SOCKET_NOT_VALIDATE(m_socket) ) return false;
+    if ( SOCKET_NOT_VALIDATE(m_socket) ) return SO_READ_CLOSE;
 
     // Set the receive time out
     struct timeval _tv = { (int)timeout / 1000, (int)timeout % 1000 * 1000 };
     if ( setsockopt( m_socket, SOL_SOCKET, SO_RCVTIMEO, &_tv, sizeof(_tv) ) == -1)
-        return false;
+        return SO_READ_CLOSE;
 
     buffer = "";
     int _data_len = 0;
@@ -143,7 +143,7 @@ bool sl_udpsocket::read_data( string &buffer, u_int32_t timeout, SOCKETSTATUE *p
         break;
     } while( true );
 
-    return (_data_len >= 0);
+    return (_data_len >= 0) ? SO_READ_DONE : SO_READ_TIMEOUT;
 }
 // Write data to peer.
 bool sl_udpsocket::write_data( const string &data )

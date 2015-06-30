@@ -69,7 +69,7 @@ public:
     bool set_keepalive( bool keepalive = true );
 
     // Read data from the socket until timeout or get any data.
-    virtual bool read_data( string &buffer, u_int32_t timeout = 1000, SOCKETSTATUE *pst = NULL );
+    virtual SO_READ_STATUE read_data( string &buffer, u_int32_t timeout = 1000 );
     // Write data to peer.
     virtual bool write_data( const string &data );
 };

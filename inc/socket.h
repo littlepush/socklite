@@ -140,6 +140,15 @@ typedef enum {
 } SOCKETSTATUE;
 
 typedef enum {
+	SO_READ_WAITING		= 0x0000,
+	SO_READ_CLOSE		= 0x0001,	// recv return code < 0
+	SO_READ_TIMEOUT		= 0x0002,	// select time out
+	SO_READ_DONE		= 0x0004,	// get incoming data
+	SO_READ_TIMEOUT_AND_UNFINISH	= SO_READ_DONE | SO_READ_TIMEOUT,
+	SO_READ_DONE_BUT_CLOSED			= SO_READ_DONE | SO_READ_CLOSE,
+} SO_READ_STATUE;
+
+typedef enum {
     SO_CHECK_WRITE      = 1,
     SO_CHECK_READ       = 2,
     SO_CHECK_CONNECT    = SO_CHECK_WRITE | SO_CHECK_READ
@@ -235,7 +244,7 @@ public:
     virtual bool set_reusable( bool reusable = true ) = 0;
 
     // Read data from the socket until timeout or get any data.
-    virtual bool read_data( string &buffer, u_int32_t timeout = 1000, SOCKETSTATUE *pst = NULL ) = 0;
+    virtual SO_READ_STATUE read_data( string &buffer, u_int32_t timeout = 1000 ) = 0;
     // Write data to peer.
     virtual bool write_data( const string &data ) = 0;
 };

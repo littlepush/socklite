@@ -231,7 +231,8 @@ void loop_worker(mutex *m, bool *st) {
 			} else {
 				string _buf;
 				sl_tcpsocket _wso(_e.so);
-				if ( _wso.read_data(_buf) ) {
+				SO_READ_STATUE _st = _wso.read_data(_buf);
+				if ( _st & SO_READ_DONE ) {
 					if ( sl_isbackdoor(_e.so) ) {
 						// nothing
 					} else {
@@ -243,6 +244,13 @@ void loop_worker(mutex *m, bool *st) {
 							sl_tcpsocket _wbdso(_it.first);
 							_wbdso.write_data(_buf);
 						}
+					}
+				}
+				if ( _st & SO_READ_CLOSE ) {
+					if ( sl_isbackdoor(_e.so) ) {
+						sl_backdoor_del(_e.so);
+					} else {
+						sl_unbind_relay(_e.so);
 					}
 				}
 			}
