@@ -62,6 +62,8 @@ public:
     virtual bool set_reusable( bool reusable = true );
     // Enable TCP_KEEPALIVE or not
     bool set_keepalive( bool keepalive = true );
+	// Set the socket to be non-block
+	bool set_nonblocking( bool nonblocking = true );
 
     // Read data from the socket until timeout or get any data.
     virtual SO_READ_STATUE read_data( string &buffer, u_int32_t timeout = 1000 );

@@ -170,6 +170,11 @@ size_t sl_poller::fetch_events( sl_poller::earray &events, unsigned int timedout
 void sl_poller::monitor_socket( SOCKET_T so, bool oneshot, bool isreset ) {
 	if ( m_fd == -1 ) return;
 #if SL_TARGET_LINUX
+
+	// Socket must be nonblocking
+	unsigned long _u = 1;
+	SL_NETWORK_IOCTL_CALL(so, FIONBIO, &_u);
+
 	struct epoll_event _ee;
 	_ee.data.fd = so;
 	_ee.events = EPOLLIN | EPOLLET;

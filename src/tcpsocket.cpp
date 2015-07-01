@@ -333,6 +333,13 @@ bool sl_tcpsocket::set_keepalive( bool keepalive )
         (const char *)&_keepalive, sizeof(int) );
 }
 
+bool sl_tcpsocket::set_nonblocking(bool nonblocking) 
+{
+	if ( m_socket == INVALIDATE_SOCKET ) return false;
+	unsigned long _u = (nonblocking ? 1 : 0);
+	return SL_NETWORK_IOCTL_CALL(m_socket, FIONBIO, &_u) >= 0;
+}
+
 // Read data from the socket until timeout or get any data.
 SO_READ_STATUE sl_tcpsocket::read_data( string &buffer, u_int32_t timeout)
 {
@@ -382,7 +389,8 @@ SO_READ_STATUE sl_tcpsocket::read_data( string &buffer, u_int32_t timeout)
 
 SO_READ_STATUE sl_tcpsocket::recv( string &buffer, unsigned int max_buffer_len ) {
 	if ( SOCKET_NOT_VALIDATE(m_socket) ) return SO_READ_CLOSE;
-
+	
+	// Socket must be nonblocking
 	buffer.resize(max_buffer_len);
 	int _retCode = ::recv(m_socket, &buffer[0], max_buffer_len, 0 );
 	if ( _retCode <= 0 ) {
