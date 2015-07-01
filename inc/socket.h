@@ -245,6 +245,7 @@ public:
 
     // Read data from the socket until timeout or get any data.
     virtual SO_READ_STATUE read_data( string &buffer, u_int32_t timeout = 1000 ) = 0;
+
     // Write data to peer.
     virtual bool write_data( const string &data ) = 0;
 };
