@@ -386,10 +386,20 @@ SO_READ_STATUE sl_tcpsocket::recv( string &buffer, unsigned int max_buffer_len )
 	buffer.resize(max_buffer_len);
 	int _retCode = ::recv(m_socket, &buffer[0], max_buffer_len, 0 );
 	if ( _retCode <= 0 ) {
+		int _error = 0, _len = sizeof(int);
+		getsockopt( m_socket, SOL_SOCKET, SO_ERROR,
+				(char *)&_error, (socklen_t *)&_len);
+		// Really closed 
+		buffer.resize(0);
+		if ( _error == EBADF || _error == ECONNRESET || _error == ENOTCONN ) {
+			return SO_READ_CLOSE;
+		}
+	} else if ( _retCode == 0 ) {
 		buffer.resize(0);
 		return SO_READ_CLOSE;
+	} else {
+		buffer.resize(_retCode);
 	}
-	buffer.resize(_retCode);
 	return SO_READ_DONE;
 }
 

@@ -172,7 +172,7 @@ void sl_poller::monitor_socket( SOCKET_T so, bool oneshot, bool isreset ) {
 #if SL_TARGET_LINUX
 	struct epoll_event _ee;
 	_ee.data.fd = so;
-	_ee.events = EPOLLIN | EPOLLET | EPOLLOUT;
+	_ee.events = EPOLLIN | EPOLLET;
 	int _op = EPOLL_CTL_ADD;
 	if ( oneshot ) {
 		_ee.events |= EPOLLONESHOT;
