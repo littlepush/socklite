@@ -167,16 +167,18 @@ size_t sl_poller::fetch_events( sl_poller::earray &events, unsigned int timedout
 	return events.size();
 }
 
-void sl_poller::monitor_socket( SOCKET_T so, bool oneshot ) {
+void sl_poller::monitor_socket( SOCKET_T so, bool oneshot, bool isreset ) {
 	if ( m_fd == -1 ) return;
 #if SL_TARGET_LINUX
 	struct epoll_event _ee;
 	_ee.data.fd = so;
 	_ee.events = EPOLLIN | EPOLLET | EPOLLOUT;
+	int _op = EPOLL_CTL_ADD;
 	if ( oneshot ) {
 		_ee.events |= EPOLLONESHOT;
+		if ( isreset ) _op = EPOLL_CTL_MOD;
 	}
-	epoll_ctl( m_fd, EPOLL_CTL_ADD, so, &_ee );
+	epoll_ctl( m_fd, _op, so, &_ee );
 #elif SL_TARGET_MAC
 	struct kevent _ke;
 	unsigned short _flags = EV_ADD;
