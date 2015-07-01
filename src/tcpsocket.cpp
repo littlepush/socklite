@@ -30,7 +30,7 @@
 #include "socks5.h"
 
 sl_tcpsocket::sl_tcpsocket(bool iswrapper)
-:/*_svrfd(NULL),*/ m_iswrapper(iswrapper),
+: m_iswrapper(iswrapper),
 	m_is_connected_to_proxy(false), 
 	m_socket(INVALIDATE_SOCKET)
 {
@@ -288,11 +288,6 @@ bool sl_tcpsocket::listen( u_int32_t port, u_int32_t ipaddr )
         SL_NETWORK_CLOSESOCK( m_socket );
         return false;
     }
-	/*
-    _svrfd = (struct pollfd *)calloc(1, sizeof(struct pollfd));
-    _svrfd->events = POLLIN | POLLPRI;
-    _svrfd->fd = m_socket;
-	*/
     this->set_reusable();
     return true;
 }
@@ -302,53 +297,7 @@ void sl_tcpsocket::close()
     if ( SOCKET_NOT_VALIDATE(m_socket) ) return;
     SL_NETWORK_CLOSESOCK(m_socket);
     m_socket = INVALIDATE_SOCKET;
-	/*
-    if ( _svrfd != NULL ) {
-        free( _svrfd );
-        _svrfd = NULL;
-    }
-	*/
 }
-// When the socket is a listener, use this method 
-// to accept client's connection.
-/*
-sl_socket *sl_tcpsocket::get_client( u_int32_t timeout )
-{
-    if ( _svrfd == NULL ) return NULL;
-    size_t _nfds = 1;   // number of fd
-    int _ret = 0;
-    _ret = poll( _svrfd, _nfds, timeout );
-    if ( _ret == -1 ) {
-        this->close();
-        return NULL;
-    }
-
-    if ( _svrfd->revents == 0 ) {
-        // No incoming socket
-        return NULL;
-    }
-    if ( _svrfd->revents & POLLIN ) {
-        // PINFO("New incoming socket.");
-        struct sockaddr_in _sockInfoClient;
-        int _len = 0;
-        SOCKET_T _clt = accept(m_socket, (struct sockaddr *)&_sockInfoClient, (socklen_t *)&_len);
-
-        // Accept and create new client socket.
-        if ( _clt == -1 ) return NULL;
-        sl_tcpsocket *_client_socket = new sl_tcpsocket;
-        _client_socket->m_socket = _clt;
-        _client_socket->set_reusable( );
-
-        return _client_socket;
-    }
-    return NULL;
-}
-void sl_tcpsocket::release_client( sl_socket *client )
-{
-    if ( client == NULL ) return;
-    delete client;
-}
-*/
 
 // Try to get the original destination
 bool sl_tcpsocket::get_original_dest( string &address, u_int32_t &port )

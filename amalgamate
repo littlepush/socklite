@@ -9,6 +9,8 @@ fheader=dist/socketlite.h
 head -n 21 inc/socket.h > $fheader
 echo "// This is an amalgamate file for socketlite" >> $fheader
 echo "" >> $fheader
+echo "// Current Version: "$(./version) >> $fheader
+echo "" >> $fheader
 echo "#pragma once" >> $fheader
 
 function split_headerfile() {
@@ -33,6 +35,8 @@ echo "// End of amalgamate file" >> $fheader
 fsource=dist/socketlite.cpp
 head -n 21 inc/socket.h > $fsource
 echo "// This is an amalgamate file for socketlite" >> $fsource
+echo "" >> $fsource
+echo "// Current Version: "$(./version) >> $fsource
 echo "" >> $fsource
 echo "#include \"socketlite.h\"" >> $fsource
 

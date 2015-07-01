@@ -82,7 +82,9 @@ public:
 	size_t fetch_events( earray &events,  unsigned int timedout = 1000 );
 
 	// Start to monitor a socket hander
-	void monitor_socket( SOCKET_T so );
+	// In default, the poller will maintain the socket infinite, if
+	// `oneshot` is true, then will add the ONESHOT flag
+	void monitor_socket( SOCKET_T so, bool oneshot = false );
 
 	// Singleton Poller Item
 	static sl_poller &server();

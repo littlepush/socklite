@@ -32,7 +32,6 @@ class sl_tcpsocket : public sl_socket
 {
 protected:
 	bool m_iswrapper;
-    //struct pollfd *_svrfd;
     bool m_is_connected_to_proxy;
 
     // Internal connect to peer
@@ -55,10 +54,6 @@ public:
     virtual bool listen( u_int32_t port, u_int32_t ipaddr = INADDR_ANY );
     // Close the connection
     virtual void close();
-    // When the socket is a listener, use this method 
-    // to accept client's connection.
-    // virtual sl_socket *get_client( u_int32_t timeout = 100 );
-    // virtual void release_client( sl_socket *client );
 
     // Try to get the original destination, this method now only work under linux
     bool get_original_dest( string &address, u_int32_t &port );
