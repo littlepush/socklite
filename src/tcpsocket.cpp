@@ -432,38 +432,21 @@ bool sl_tcpsocket::write_data( const string &data )
     if ( data.size() == 0 ) return false;
     if ( SOCKET_NOT_VALIDATE(m_socket) ) return false;
 
-    int _allSent = 0;
     int _lastSent = 0;
 
-    u_int32_t _length = data.size();
+    unsigned int _length = data.size();
     const char *_data = data.c_str();
 
-    while ( _allSent < _length )
+    while ( _length > 0 )
     {
-		fd_set _fs;
-		FD_ZERO(&_fs);
-		FD_SET(m_socket, &_fs);
-		struct timeval _tv = {1, 0};
-		int _ret = 0;
-		do {
-			_ret = ::select(m_socket + 1, NULL, &_fs, NULL, &_tv);
-		} while ( _ret < 0 && errno == EINTR );
-		if ( _ret == 0 ) continue;
-		// Cannot write
-		if ( _ret < 0 ) return false;
-
-		unsigned int _wmem = 0;
-		socklen_t _optlen = sizeof(_wmem);
-		getsockopt(m_socket, SOL_SOCKET, SO_SNDBUF, &_wmem, &_optlen);
-
-		unsigned int _available_length = min((_length - _allSent), _wmem);
-        _lastSent = ::send( m_socket, _data + _allSent, 
-           	_available_length, 0 | SL_NETWORK_NOSIGNAL );
-        if( _lastSent < 0 ) {
+        _lastSent = ::send( m_socket, _data, 
+           	_length, 0 | SL_NETWORK_NOSIGNAL );
+        if( _lastSent <= 0 ) {
             // Failed to send
             return false;
         }
-        _allSent += _lastSent;
+		_data += _lastSent;
+		_length -= _lastSent;
     }
     return true;
 }
