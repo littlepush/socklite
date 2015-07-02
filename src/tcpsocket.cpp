@@ -391,23 +391,27 @@ SO_READ_STATUE sl_tcpsocket::recv( string &buffer, unsigned int max_buffer_len )
 	if ( SOCKET_NOT_VALIDATE(m_socket) ) return SO_READ_CLOSE;
 	
 	// Socket must be nonblocking
+	buffer.clear();
 	buffer.resize(max_buffer_len);
-	int _retCode = ::recv(m_socket, &buffer[0], max_buffer_len, 0 );
-	if ( _retCode <= 0 ) {
-		int _error = 0, _len = sizeof(int);
-		getsockopt( m_socket, SOL_SOCKET, SO_ERROR,
-				(char *)&_error, (socklen_t *)&_len);
-		// Really closed 
-		buffer.resize(0);
-		if ( _error == EBADF || _error == ECONNRESET || _error == ENOTCONN ) {
+	do {
+		int _retCode = ::recv(m_socket, &buffer[0], max_buffer_len, 0 );
+		if ( _retCode < 0 ) {
+			int _error = 0, _len = sizeof(int);
+			getsockopt( m_socket, SOL_SOCKET, SO_ERROR,
+					(char *)&_error, (socklen_t *)&_len);
+			if ( _error == EINTR ) continue;	// signal 7, retry
+			// Other error
+			buffer.resize(0);
 			return SO_READ_CLOSE;
+		} else if ( _retCode == 0 ) {
+			// Peer Close
+			buffer.resize(0);
+			return SO_READ_CLOSE;
+		} else {
+			buffer.resize(_retCode);
+			return SO_READ_DONE;
 		}
-	} else if ( _retCode == 0 ) {
-		buffer.resize(0);
-		return SO_READ_CLOSE;
-	} else {
-		buffer.resize(_retCode);
-	}
+	} while ( true );
 	return SO_READ_DONE;
 }
 
@@ -416,17 +420,6 @@ bool sl_tcpsocket::write_data( const string &data )
 {
     if ( data.size() == 0 ) return false;
     if ( SOCKET_NOT_VALIDATE(m_socket) ) return false;
-    u_int32_t _write_timeout = 1000;
-
-#if defined WIN32 || defined _WIN32 || defined WIN64 || defined _WIN64
-    setsockopt( m_socket, SOL_SOCKET, SO_SNDTIMEO,
-        (const char *)&_write_timeout, sizeof(Uint32) );
-#else
-    struct timeval wtv = { _write_timeout / 1000, 
-        static_cast<int>((_write_timeout % 1000) * 1000) };
-    setsockopt(m_socket, SOL_SOCKET, SO_SNDTIMEO, 
-        (const char *)&wtv, sizeof(struct timeval));
-#endif
 
     int _allSent = 0;
     int _lastSent = 0;
@@ -434,10 +427,27 @@ bool sl_tcpsocket::write_data( const string &data )
     u_int32_t _length = data.size();
     const char *_data = data.c_str();
 
-    while ( (unsigned int)_allSent < _length )
+    while ( _allSent < _length )
     {
+		fd_set _fs;
+		FD_ZERO(&_fs);
+		FD_SET(m_socket, &_fs);
+		struct timeval _tv = {1, 0};
+		int _ret = 0;
+		do {
+			_ret = ::select(m_socket + 1, NULL, &_fs, NULL, &_tv);
+		} while ( _ret < 0 && errno == EINTR );
+		if ( _ret == 0 ) continue;
+		// Cannot write
+		if ( _ret < 0 ) return false;
+
+		unsigned int _wmem = 0;
+		socklen_t _optlen = sizeof(_wmem);
+		getsockopt(m_socket, SOL_SOCKET, SO_SNDBUF, &_wmem, &_optlen);
+
+		unsigned int _available_length = min((_length - _allSent), _wmem);
         _lastSent = ::send( m_socket, _data + _allSent, 
-            (_length - (unsigned int)_allSent), 0 | SL_NETWORK_NOSIGNAL );
+           	_available_length, 0 | SL_NETWORK_NOSIGNAL );
         if( _lastSent < 0 ) {
             // Failed to send
             return false;
