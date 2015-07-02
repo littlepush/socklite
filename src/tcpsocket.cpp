@@ -340,6 +340,19 @@ bool sl_tcpsocket::set_nonblocking(bool nonblocking)
 	return SL_NETWORK_IOCTL_CALL(m_socket, FIONBIO, &_u) >= 0;
 }
 
+bool sl_tcpsocket::set_socketbufsize( unsigned int rmem, unsigned int wmem )
+{
+	if ( m_socket == INVALIDATE_SOCKET ) return false;
+	if ( rmem != 0 ) {
+		setsockopt(m_socket, SOL_SOCKET, SO_RCVBUF, 
+				(char *)&rmem, sizeof(rmem));
+	}
+	if ( wmem != 0 ) {
+		setsockopt(m_socket, SOL_SOCKET, SO_SNDBUF,
+				(char *)&wmem, sizeof(wmem));
+	}
+	return true;
+}
 // Read data from the socket until timeout or get any data.
 SO_READ_STATUE sl_tcpsocket::read_data( string &buffer, u_int32_t timeout)
 {

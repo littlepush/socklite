@@ -64,6 +64,8 @@ public:
     bool set_keepalive( bool keepalive = true );
 	// Set the socket to be non-block
 	bool set_nonblocking( bool nonblocking = true );
+	// Set socket buffer, 0 means remine default
+	bool set_socketbufsize( unsigned int rmem = 0, unsigned int wmem = 0 );
 
     // Read data from the socket until timeout or get any data.
     virtual SO_READ_STATUE read_data( string &buffer, u_int32_t timeout = 1000 );
