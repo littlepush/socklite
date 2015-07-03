@@ -275,6 +275,9 @@ bool sl_tcpsocket::listen( u_int32_t port, u_int32_t ipaddr )
     m_socket = ::socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
     if ( SOCKET_NOT_VALIDATE(m_socket) ) return false;
 
+	// Make the socket reusable
+	this->set_reusable(true);
+
     memset((char *)&_sock_addr, 0, sizeof(_sock_addr));
     _sock_addr.sin_family = AF_INET;
     _sock_addr.sin_port = htons(port);
@@ -288,7 +291,6 @@ bool sl_tcpsocket::listen( u_int32_t port, u_int32_t ipaddr )
         SL_NETWORK_CLOSESOCK( m_socket );
         return false;
     }
-    this->set_reusable();
     return true;
 }
 // Close the connection
