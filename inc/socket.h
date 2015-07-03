@@ -224,6 +224,10 @@ void network_peer_info_from_socket( const SOCKET_T hSo, u_int32_t &ipaddr, u_int
 // Check the specified socket's status according to the option.
 SOCKETSTATUE socket_check_status( SOCKET_T hSo, SOCKETOPT option = SO_CHECK_READ, u_int32_t waitTime = 0 );
 
+// Set the linger time for a socket, I strong suggest not to change this value unless you 
+// know what you are doing
+bool socket_set_linger_time(SOCKET_T so, bool onoff = true, unsigned timeout = 1);
+
 // The basic virtual socket class
 class sl_socket
 {
