@@ -33,7 +33,7 @@ sl_udpsocket::~sl_udpsocket()
 }
 
 // Connect to peer
-bool sl_udpsocket::connect( const string &ipaddr, u_int32_t port )
+bool sl_udpsocket::connect( const string &ipaddr, uint32_t port, uint32_t timeout )
 {
     memset( &m_sock_addr, 0, sizeof(m_sock_addr) );
     m_sock_addr.sin_family = AF_INET;
@@ -51,7 +51,7 @@ bool sl_udpsocket::connect( const string &ipaddr, u_int32_t port )
     return true;
 }
 // Listen on specified port and address, default is 0.0.0.0
-bool sl_udpsocket::listen( u_int32_t port, u_int32_t ipaddr )
+bool sl_udpsocket::listen( uint32_t port, uint32_t ipaddr )
 {
     m_socket = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
     if ( SOCKET_NOT_VALIDATE(m_socket) ) return false;
@@ -75,7 +75,7 @@ void sl_udpsocket::close()
 }
 // When the socket is a listener, use this method 
 // to accept client's connection.
-sl_socket* sl_udpsocket::get_client( u_int32_t timeout )
+sl_socket* sl_udpsocket::get_client( uint32_t timeout )
 {
     if ( m_socket == INVALIDATE_SOCKET ) return NULL;
 
@@ -120,7 +120,7 @@ bool sl_udpsocket::set_reusable( bool reusable )
 }
 
 // Read data from the socket until timeout or get any data.
-SO_READ_STATUE sl_udpsocket::read_data( string &buffer, u_int32_t timeout )
+SO_READ_STATUE sl_udpsocket::read_data( string &buffer, uint32_t timeout )
 {
     if ( SOCKET_NOT_VALIDATE(m_socket) ) return SO_READ_CLOSE;
 
@@ -158,7 +158,7 @@ bool sl_udpsocket::write_data( const string &data )
         int _allSent = 0;
         int _lastSent = 0;
 
-        u_int32_t _length = data.size();
+        uint32_t _length = data.size();
         const char *_data = data.c_str();
 
         while ( (unsigned int)_allSent < _length )

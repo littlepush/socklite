@@ -216,13 +216,13 @@ unsigned int network_domain_to_inaddr(const char * domain);
 void network_get_localhost_name( string &hostname );
 
 // Convert the uint ip addr to human readable ip string.
-void network_int_to_ipaddress( const u_int32_t ipaddr, string &ip );
+void network_int_to_ipaddress( const uint32_t ipaddr, string &ip );
 
 // Get peer ipaddress and port from a specified socket handler.
-void network_peer_info_from_socket( const SOCKET_T hSo, u_int32_t &ipaddr, u_int32_t &port );
+void network_peer_info_from_socket( const SOCKET_T hSo, uint32_t &ipaddr, uint32_t &port );
 
 // Check the specified socket's status according to the option.
-SOCKETSTATUE socket_check_status( SOCKET_T hSo, SOCKETOPT option = SO_CHECK_READ, u_int32_t waitTime = 0 );
+SOCKETSTATUE socket_check_status( SOCKET_T hSo, SOCKETOPT option = SO_CHECK_READ, uint32_t waitTime = 0 );
 
 // Set the linger time for a socket, I strong suggest not to change this value unless you 
 // know what you are doing
@@ -234,21 +234,21 @@ class sl_socket
 public:
     virtual ~sl_socket();
     // Connect to peer
-    virtual bool connect( const string &ipaddr, u_int32_t port ) = 0;
+    virtual bool connect( const string &ipaddr, uint32_t port, uint32_t = 1000 ) = 0;
     // Listen on specified port and address, default is 0.0.0.0
-    virtual bool listen( u_int32_t port, u_int32_t ipaddr = INADDR_ANY ) = 0;
+    virtual bool listen( uint32_t port, uint32_t ipaddr = INADDR_ANY ) = 0;
     // Close the connection
     virtual void close() = 0;
     // When the socket is a listener, use this method 
     // to accept client's connection.
-    //virtual sl_socket *get_client( u_int32_t timeout = 100 ) = 0;
+    //virtual sl_socket *get_client( uint32_t timeout = 100 ) = 0;
     //virtual void release_client( sl_socket *client ) = 0;
 
     // Set current socket reusable or not
     virtual bool set_reusable( bool reusable = true ) = 0;
 
     // Read data from the socket until timeout or get any data.
-    virtual SO_READ_STATUE read_data( string &buffer, u_int32_t timeout = 1000 ) = 0;
+    virtual SO_READ_STATUE read_data( string &buffer, uint32_t timeout = 1000 ) = 0;
 
     // Write data to peer.
     virtual bool write_data( const string &data ) = 0;

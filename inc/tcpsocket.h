@@ -35,7 +35,7 @@ protected:
     bool m_is_connected_to_proxy;
 
     // Internal connect to peer
-    bool _internal_connect( const string &ipaddr, u_int32_t port );
+    bool _internal_connect( const string &ipaddr, uint32_t port, uint32_t timeout = 1000 );
 public:
     // The socket handler
     SOCKET_T  m_socket;
@@ -45,18 +45,18 @@ public:
     virtual ~sl_tcpsocket();
 
     // Set up a socks5 proxy.
-    bool setup_proxy( const string &socks5_addr, u_int32_t socks5_port );
-	bool setup_proxy( const string &socks5_addr, u_int32_t socks5_port,
+    bool setup_proxy( const string &socks5_addr, uint32_t socks5_port );
+	bool setup_proxy( const string &socks5_addr, uint32_t socks5_port,
 			const string &username, const string &password);
     // Connect to peer
-    virtual bool connect( const string &ipaddr, u_int32_t port );
+    virtual bool connect( const string &ipaddr, uint32_t port, uint32_t timeout = 1000 );
     // Listen on specified port and address, default is 0.0.0.0
-    virtual bool listen( u_int32_t port, u_int32_t ipaddr = INADDR_ANY );
+    virtual bool listen( uint32_t port, uint32_t ipaddr = INADDR_ANY );
     // Close the connection
     virtual void close();
 
     // Try to get the original destination, this method now only work under linux
-    bool get_original_dest( string &address, u_int32_t &port );
+    bool get_original_dest( string &address, uint32_t &port );
 
     // Set current socket reusable or not
     virtual bool set_reusable( bool reusable = true );
@@ -68,7 +68,7 @@ public:
 	bool set_socketbufsize( unsigned int rmem = 0, unsigned int wmem = 0 );
 
     // Read data from the socket until timeout or get any data.
-    virtual SO_READ_STATUE read_data( string &buffer, u_int32_t timeout = 1000 );
+    virtual SO_READ_STATUE read_data( string &buffer, uint32_t timeout = 1000 );
 
 	// Only try to read data once, the socket must receive SL_EVENT_DATA by the poller
 	SO_READ_STATUE recv(string &buffer, unsigned int max_buffer_len = 512);

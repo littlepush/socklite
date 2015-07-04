@@ -44,21 +44,21 @@ public:
     virtual ~sl_udpsocket();
 
     // Connect to peer
-    virtual bool connect( const string &ipaddr, u_int32_t port );
+    virtual bool connect( const string &ipaddr, uint32_t port, uint32_t timeout = 1000 );
     // Listen on specified port and address, default is 0.0.0.0
-    virtual bool listen( u_int32_t port, u_int32_t ipaddr = INADDR_ANY );
+    virtual bool listen( uint32_t port, uint32_t ipaddr = INADDR_ANY );
     // Close the connection
     virtual void close();
     // When the socket is a listener, use this method 
     // to accept client's connection.
-    virtual sl_socket *get_client( u_int32_t timeout = 100 );
+    virtual sl_socket *get_client( uint32_t timeout = 100 );
     virtual void release_client( sl_socket *client );
 
     // Set current socket reusable or not
     virtual bool set_reusable( bool reusable = true );
 
     // Read data from the socket until timeout or get any data.
-    virtual SO_READ_STATUE read_data( string &buffer, u_int32_t timeout = 1000 );
+    virtual SO_READ_STATUE read_data( string &buffer, uint32_t timeout = 1000 );
     // Write data to peer.
     virtual bool write_data( const string &data );
 };
