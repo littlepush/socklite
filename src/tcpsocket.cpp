@@ -113,11 +113,13 @@ bool sl_tcpsocket::_internal_connect( const string &ipaddr, uint32_t port, uint3
             if ( _error != 0 ) {
                 // Failed to connect
                 SL_NETWORK_CLOSESOCK( m_socket );
+				m_socket = INVALIDATE_SOCKET;
                 return false;
             }
         } else {
             // Failed to connect
             SL_NETWORK_CLOSESOCK( m_socket );
+			m_socket = INVALIDATE_SOCKET;
             return false;
         }
     }
