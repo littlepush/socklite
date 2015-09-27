@@ -29,25 +29,20 @@
 
 #include "socks5.h"
 
-sl_tcpsocket::sl_tcpsocket(bool iswrapper)
-: m_iswrapper(iswrapper),
-	m_is_connected_to_proxy(false), 
-	m_socket(INVALIDATE_SOCKET)
+sl_tcpsocket::sl_tcpsocket(bool iswrapper) 
+    : sl_socket(iswrapper),
+	m_is_connected_to_proxy(false)
 {
     // Nothing
 }
 sl_tcpsocket::sl_tcpsocket(SOCKET_T so, bool iswrapper)
-	: m_iswrapper(iswrapper),
-	m_is_connected_to_proxy(false),
-	m_socket(so)
+	: sl_socket(iswrapper),
+	m_is_connected_to_proxy(false)
 {
-	// Nothing
+    m_socket = so;
 }
 sl_tcpsocket::~sl_tcpsocket()
 {
-	if ( m_iswrapper == false ) {
-   		this->close();
-	}
 }
 
 // Connect to peer
@@ -295,13 +290,6 @@ bool sl_tcpsocket::listen( uint32_t port, uint32_t ipaddr )
     }
     return true;
 }
-// Close the connection
-void sl_tcpsocket::close()
-{
-    if ( SOCKET_NOT_VALIDATE(m_socket) ) return;
-    SL_NETWORK_CLOSESOCK(m_socket);
-    m_socket = INVALIDATE_SOCKET;
-}
 
 // Try to get the original destination
 bool sl_tcpsocket::get_original_dest( string &address, uint32_t &port )
@@ -320,43 +308,6 @@ bool sl_tcpsocket::get_original_dest( string &address, uint32_t &port )
 #endif
 }
 
-// Set current socket reusable or not
-bool sl_tcpsocket::set_reusable( bool reusable )
-{
-    if ( m_socket == INVALIDATE_SOCKET ) return false;
-    int _reused = reusable ? 1 : 0;
-    return setsockopt( m_socket, SOL_SOCKET, SO_REUSEADDR,
-        (const char *)&_reused, sizeof(int) ) != -1;
-}
-
-bool sl_tcpsocket::set_keepalive( bool keepalive )
-{
-    if ( m_socket == INVALIDATE_SOCKET ) return false;
-    int _keepalive = keepalive ? 1 : 0;
-    return setsockopt( m_socket, SOL_SOCKET, SO_KEEPALIVE, 
-        (const char *)&_keepalive, sizeof(int) );
-}
-
-bool sl_tcpsocket::set_nonblocking(bool nonblocking) 
-{
-	if ( m_socket == INVALIDATE_SOCKET ) return false;
-	unsigned long _u = (nonblocking ? 1 : 0);
-	return SL_NETWORK_IOCTL_CALL(m_socket, FIONBIO, &_u) >= 0;
-}
-
-bool sl_tcpsocket::set_socketbufsize( unsigned int rmem, unsigned int wmem )
-{
-	if ( m_socket == INVALIDATE_SOCKET ) return false;
-	if ( rmem != 0 ) {
-		setsockopt(m_socket, SOL_SOCKET, SO_RCVBUF, 
-				(char *)&rmem, sizeof(rmem));
-	}
-	if ( wmem != 0 ) {
-		setsockopt(m_socket, SOL_SOCKET, SO_SNDBUF,
-				(char *)&wmem, sizeof(wmem));
-	}
-	return true;
-}
 // Read data from the socket until timeout or get any data.
 SO_READ_STATUE sl_tcpsocket::read_data( string &buffer, uint32_t timeout)
 {

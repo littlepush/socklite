@@ -145,10 +145,21 @@ size_t sl_poller::fetch_events( sl_poller::earray &events, unsigned int timedout
 		}
 #if SL_TARGET_LINUX
 		else if ( m_udp_svr_map.find(_pe->data.fd) != m_udp_svr_map.end() ) {
+			_e.so = _pe->data.fd;
 #elif SL_TARGET_MAC
 		else if ( m_udp_svr_map.find(_pe->ident) != m_udp_svr_map.end() ) {
+			_e.so = _pe->ident;
 #endif
-			// Nothing now...
+			_e.source = _e.so;
+			_e.socktype = IPPROTO_UDP;
+
+			// Get the peer info, but remind the data in the queue.
+			_e.event = SL_EVENT_DATA;
+			socklen_t _l = sizeof(_e.address);
+			::recvfrom( _e.so, NULL, 0, MSG_PEEK,
+            	(struct sockaddr *)&_e.address, &_l);
+
+			events.push_back(_e);
 		}
 		else {
 			// R/W
@@ -161,6 +172,8 @@ size_t sl_poller::fetch_events( sl_poller::earray &events, unsigned int timedout
 			getsockopt( _e.so, SOL_SOCKET, SO_ERROR, 
 					(char *)&_error, (socklen_t *)&_len);
 			_e.event = (_error != 0) ? SL_EVENT_FAILED : SL_EVENT_DATA;
+			getsockopt( _e.so, SOL_SOCKET, SO_TYPE,
+					(char *)&_e.socktype, (socklen_t *)&_len);
 			events.push_back(_e);
 		}
 	}

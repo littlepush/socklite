@@ -30,35 +30,29 @@
 // UDP socket
 class sl_udpsocket : public sl_socket
 {
-protected:
-    char m_buffer[1024];
 public:
-    // The socket handler
-    SOCKET_T m_socket;
-    SOCKET_T m_parent; 
     struct sockaddr_in m_sock_addr;
-    socklen_t m_so_len;
-    string m_data;
 
-    sl_udpsocket();
+    sl_udpsocket(bool iswrapper = false);
+    sl_udpsocket(SOCKET_T so);
+    sl_udpsocket(SOCKET_T so, struct sockaddr_in addr);
+
     virtual ~sl_udpsocket();
+
+    // The IP Address information for peer socket
+    string & ipaddress( string & ipstr ) const;
+    // The Port of peer socket
+    uint32_t port() const;
 
     // Connect to peer
     virtual bool connect( const string &ipaddr, uint32_t port, uint32_t timeout = 1000 );
     // Listen on specified port and address, default is 0.0.0.0
     virtual bool listen( uint32_t port, uint32_t ipaddr = INADDR_ANY );
-    // Close the connection
-    virtual void close();
-    // When the socket is a listener, use this method 
-    // to accept client's connection.
-    virtual sl_socket *get_client( uint32_t timeout = 100 );
-    virtual void release_client( sl_socket *client );
-
-    // Set current socket reusable or not
-    virtual bool set_reusable( bool reusable = true );
 
     // Read data from the socket until timeout or get any data.
     virtual SO_READ_STATUE read_data( string &buffer, uint32_t timeout = 1000 );
+    // Only try to read data once, the socket must receive SL_EVENT_DATA by the poller
+    SO_READ_STATUE recv(string &buffer, unsigned int max_buffer_len = 512);
     // Write data to peer.
     virtual bool write_data( const string &data );
 };

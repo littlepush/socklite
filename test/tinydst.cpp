@@ -31,6 +31,7 @@
 #include "poller.h"
 #include "socks5.h"
 #include "tcpsocket.h"
+#include "udpsocket.h"
 #include <thread>
 #include <mutex>
 
@@ -146,6 +147,10 @@ static sl_tcpsocket &sl_backdoor() {
 	static sl_tcpsocket _svr;
 	return _svr;
 }
+static sl_udpsocket &sl_dnsserver() {
+	static sl_udpsocket _svr;
+	return _svr;
+}
 static map<SOCKET_T, bool> &sl_bdmap() {
 	static map<SOCKET_T, bool> _m;
 	return _m;
@@ -171,6 +176,20 @@ static bool sl_listen(sl_tcpsocket &svr, uint16_t port) {
 		cout << ">";
 		sleep(1);
 	}
+	cout << endl;
+	return false;
+}
+
+static bool sl_listen(sl_udpsocket &svr, uint16_t port) {
+	for ( int i = 0; i < 30; ++i ) {
+		if ( svr.listen(port) ) {
+			sl_poller::server().bind_udp_server(svr.m_socket);
+			return true;
+		}
+		cout << ">";
+		sleep(1);
+	}
+	cout << endl;
 	return false;
 }
 
@@ -230,27 +249,39 @@ void loop_worker(mutex *m, bool *st) {
 				}
 			} else {
 				string _buf;
-				sl_tcpsocket _wso(_e.so);
-				SO_READ_STATUE _st = _wso.read_data(_buf);
-				if ( _st & SO_READ_DONE ) {
-					if ( sl_isbackdoor(_e.so) ) {
-						// nothing
+				if ( _e.so == sl_dnsserver().m_socket ) {
+					sl_udpsocket _wso(_e.so, _e.address);
+					string _ipaddr;
+					cout << "[" << _wso.ipaddress(_ipaddr) << ":" << _wso.port() << "]: ";
+					if ( _wso.recv(_buf) == SO_READ_DONE ) {
+						cout << _buf.size() << "bytes >>>" << endl;
+						sl_printhex(_buf.c_str(), _buf.size());
 					} else {
-						sl_tcpsocket _wrso(sl_somap()[_e.so]);
-						_wrso.write_data(_buf);
+						cout << "Failed to read UDP data." << endl;
+					}
+				} else {
+					sl_tcpsocket _wso(_e.so);
+					SO_READ_STATUE _st = _wso.read_data(_buf);
+					if ( _st & SO_READ_DONE ) {
+						if ( sl_isbackdoor(_e.so) ) {
+							// nothing
+						} else {
+							sl_tcpsocket _wrso(sl_somap()[_e.so]);
+							_wrso.write_data(_buf);
 
-						// Redirect all data to backdoor
-						for ( auto _it : sl_bdmap() ) {
-							sl_tcpsocket _wbdso(_it.first);
-							_wbdso.write_data(_buf);
+							// Redirect all data to backdoor
+							for ( auto _it : sl_bdmap() ) {
+								sl_tcpsocket _wbdso(_it.first);
+								_wbdso.write_data(_buf);
+							}
 						}
 					}
-				}
-				if ( _st & SO_READ_CLOSE ) {
-					if ( sl_isbackdoor(_e.so) ) {
-						sl_backdoor_del(_e.so);
-					} else {
-						sl_unbind_relay(_e.so);
+					if ( _st & SO_READ_CLOSE ) {
+						if ( sl_isbackdoor(_e.so) ) {
+							sl_backdoor_del(_e.so);
+						} else {
+							sl_unbind_relay(_e.so);
+						}
 					}
 				}
 			}
@@ -280,6 +311,7 @@ int main( int argc, char * argv[] ) {
 	if ( _port > 65535 || _port <= 0 ) {
 		_port = 4001;
 	}
+
 	// Listen on sock5 proxy
 	if ( !sl_listen(sl_socks5svr(), _port) ) {
 		cerr << "Failed to listen on 4001" << endl;
@@ -289,6 +321,11 @@ int main( int argc, char * argv[] ) {
 	if ( !sl_listen(sl_backdoor(), _port + 1) ) {
 		cerr << "Failed to listen on 4002" << endl;
 		return 2;
+	}
+
+	if ( !sl_listen(sl_dnsserver(), 1253) ) {
+		cerr << "Failed to listen on 53 for UDP server" << endl;
+		return 3;
 	}
 
 	// Hang up current process, and quit till receive Ctrl+C

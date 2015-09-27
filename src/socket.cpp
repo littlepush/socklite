@@ -21,6 +21,7 @@
 */
 
 #include "socket.h"
+// #include <execinfo.h>
 
 // In No-Windows
 #ifndef FAR
@@ -144,10 +145,64 @@ bool socket_set_linger_time(SOCKET_T so, bool onoff, unsigned timeout)
 	return ( setsockopt(so, SOL_SOCKET, SO_LINGER, &_sol, sizeof(_sol)) == 0 );
 }
 
+sl_socket::sl_socket(bool iswrapper) : m_iswrapper(iswrapper), m_socket(INVALIDATE_SOCKET) { }
+
 // Virtual destructure
 sl_socket::~sl_socket()
 {
+    if ( m_iswrapper == false ) {
+        this->close();
+    }
+}
+// Close the connection
+void sl_socket::close()
+{
+    // // Debug to output the call stack
+    // void *_callstack[128];
+    // int _frames = backtrace(_callstack, 128);
+    // backtrace_symbols_fd(_callstack, _frames, STDOUT_FILENO);
 
+    if ( SOCKET_NOT_VALIDATE(m_socket) ) return;
+    SL_NETWORK_CLOSESOCK(m_socket);
+    m_socket = INVALIDATE_SOCKET;
+}
+
+// Set current socket reusable or not
+bool sl_socket::set_reusable( bool reusable )
+{
+    if ( m_socket == INVALIDATE_SOCKET ) return false;
+    int _reused = reusable ? 1 : 0;
+    return setsockopt( m_socket, SOL_SOCKET, SO_REUSEADDR,
+        (const char *)&_reused, sizeof(int) ) != -1;
+}
+
+bool sl_socket::set_keepalive( bool keepalive )
+{
+    if ( m_socket == INVALIDATE_SOCKET ) return false;
+    int _keepalive = keepalive ? 1 : 0;
+    return setsockopt( m_socket, SOL_SOCKET, SO_KEEPALIVE, 
+        (const char *)&_keepalive, sizeof(int) );
+}
+
+bool sl_socket::set_nonblocking(bool nonblocking) 
+{
+    if ( m_socket == INVALIDATE_SOCKET ) return false;
+    unsigned long _u = (nonblocking ? 1 : 0);
+    return SL_NETWORK_IOCTL_CALL(m_socket, FIONBIO, &_u) >= 0;
+}
+
+bool sl_socket::set_socketbufsize( unsigned int rmem, unsigned int wmem )
+{
+    if ( m_socket == INVALIDATE_SOCKET ) return false;
+    if ( rmem != 0 ) {
+        setsockopt(m_socket, SOL_SOCKET, SO_RCVBUF, 
+                (char *)&rmem, sizeof(rmem));
+    }
+    if ( wmem != 0 ) {
+        setsockopt(m_socket, SOL_SOCKET, SO_SNDBUF,
+                (char *)&wmem, sizeof(wmem));
+    }
+    return true;
 }
 
 /*

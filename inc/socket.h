@@ -231,21 +231,33 @@ bool socket_set_linger_time(SOCKET_T so, bool onoff = true, unsigned timeout = 1
 // The basic virtual socket class
 class sl_socket
 {
+protected:
+    bool m_iswrapper;
 public:
+    // The socket handler
+    SOCKET_T  m_socket;
+
+    sl_socket(bool iswrapper = false);
     virtual ~sl_socket();
     // Connect to peer
     virtual bool connect( const string &ipaddr, uint32_t port, uint32_t = 1000 ) = 0;
     // Listen on specified port and address, default is 0.0.0.0
     virtual bool listen( uint32_t port, uint32_t ipaddr = INADDR_ANY ) = 0;
     // Close the connection
-    virtual void close() = 0;
+    void close();
     // When the socket is a listener, use this method 
     // to accept client's connection.
     //virtual sl_socket *get_client( uint32_t timeout = 100 ) = 0;
     //virtual void release_client( sl_socket *client ) = 0;
 
     // Set current socket reusable or not
-    virtual bool set_reusable( bool reusable = true ) = 0;
+    bool set_reusable( bool reusable = true );
+    // Enable TCP_KEEPALIVE or not
+    bool set_keepalive( bool keepalive = true );
+    // Set the socket to be non-block
+    bool set_nonblocking( bool nonblocking = true );
+    // Set socket buffer, 0 means remine default
+    bool set_socketbufsize( unsigned int rmem = 0, unsigned int wmem = 0 );
 
     // Read data from the socket until timeout or get any data.
     virtual SO_READ_STATUE read_data( string &buffer, uint32_t timeout = 1000 ) = 0;

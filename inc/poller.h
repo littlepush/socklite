@@ -52,6 +52,7 @@ typedef struct tag_sl_event {
 	SOCKET_T				source;
 	SL_EVENT_ID				event;
 	int						socktype;
+    struct sockaddr_in      address;    // For UDP socket usage.
 } sl_event;
 
 class sl_poller

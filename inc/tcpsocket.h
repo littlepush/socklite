@@ -31,15 +31,11 @@
 class sl_tcpsocket : public sl_socket
 {
 protected:
-	bool m_iswrapper;
     bool m_is_connected_to_proxy;
 
     // Internal connect to peer
     bool _internal_connect( const string &ipaddr, uint32_t port, uint32_t timeout = 1000 );
 public:
-    // The socket handler
-    SOCKET_T  m_socket;
-
     sl_tcpsocket(bool iswrapper = false);
 	sl_tcpsocket(SOCKET_T so, bool iswrapper = true);
     virtual ~sl_tcpsocket();
@@ -52,20 +48,9 @@ public:
     virtual bool connect( const string &ipaddr, uint32_t port, uint32_t timeout = 1000 );
     // Listen on specified port and address, default is 0.0.0.0
     virtual bool listen( uint32_t port, uint32_t ipaddr = INADDR_ANY );
-    // Close the connection
-    virtual void close();
 
     // Try to get the original destination, this method now only work under linux
     bool get_original_dest( string &address, uint32_t &port );
-
-    // Set current socket reusable or not
-    virtual bool set_reusable( bool reusable = true );
-    // Enable TCP_KEEPALIVE or not
-    bool set_keepalive( bool keepalive = true );
-	// Set the socket to be non-block
-	bool set_nonblocking( bool nonblocking = true );
-	// Set socket buffer, 0 means remine default
-	bool set_socketbufsize( unsigned int rmem = 0, unsigned int wmem = 0 );
 
     // Read data from the socket until timeout or get any data.
     virtual SO_READ_STATUE read_data( string &buffer, uint32_t timeout = 1000 );
