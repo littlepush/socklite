@@ -119,3 +119,5 @@ v0.3 Format the socks5 proxy package, support connect to socks5 proxy with usern
 
 v0.4 Support amalgamate script, re-write `sl_socket::read_data` to avoid unfinished package.
 
+v0.5 Rewrite UDP socket, use `sl_poller` to monitor the UDP connections.
+
