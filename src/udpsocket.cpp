@@ -72,6 +72,13 @@ bool sl_udpsocket::connect( const string &ipaddr, uint32_t port, uint32_t timeou
     if ( SOCKET_NOT_VALIDATE(m_socket) ) {
         return false;
     }
+    // Bind to 0, so we can get the port number by getsockname
+    struct sockaddr_in _usin = {};
+    _usin.sin_family = AF_INET;
+    _usin.sin_addr.s_addr = htonl(INADDR_ANY);
+    _usin.sin_port = 0;
+    bind(m_socket, (struct sockaddr *)&_usin, sizeof(_usin));
+
     return true;
 }
 // Listen on specified port and address, default is 0.0.0.0
@@ -152,7 +159,6 @@ SO_READ_STATUE sl_udpsocket::recv(string &buffer, unsigned int max_buffer_len)
             return SO_READ_CLOSE;
         } else {
             buffer.resize(_retCode);
-            cout << "recv: " << _retCode << "bytes" << endl;
             return SO_READ_DONE;
         }
     } while ( true );
