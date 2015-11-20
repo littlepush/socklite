@@ -288,11 +288,12 @@ public:
     const uint16_t &    port_number;
 
     void parse_peerinfo_from_string(const string &format_string);
+    void set_peerinfo(const string &ipaddress, uint16_t port);
 
     sl_peerinfo();
     sl_peerinfo(uint32_t inaddr, uint16_t port);
     sl_peerinfo(const string &format_string);
-    sl_peerinfo(const string &ipaddr, uint16_t p);
+    sl_peerinfo(const string &ipaddr, uint16_t port);
     sl_peerinfo(const sl_peerinfo& rhs);
     sl_peerinfo & operator = (const sl_peerinfo& rhs);
     sl_peerinfo & operator = (const string &format_string);
