@@ -321,7 +321,7 @@ public:
     virtual ~sl_socket();
     // Connect to peer
     virtual bool connect( const uint32_t inaddr, uint32_t port, uint32_t timeout = 1000 ) = 0;
-    bool connect( const sl_ip ip, uint32_t port, uint32_t timeout = 1000 );
+    bool connect( const sl_ip& ip, uint32_t port, uint32_t timeout = 1000 );
     bool connect( const sl_peerinfo &peer, uint32_t timeout = 1000 );
     virtual bool connect( const string &ipaddr, uint32_t port, uint32_t timeout = 1000 ) = 0;
     // Listen on specified port and address, default is 0.0.0.0

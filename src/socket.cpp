@@ -316,7 +316,7 @@ void sl_socket::close()
     SL_NETWORK_CLOSESOCK(m_socket);
     m_socket = INVALIDATE_SOCKET;
 }
-bool sl_socket::connect( const sl_ip ip, uint32_t port, uint32_t timeout )
+bool sl_socket::connect( const sl_ip& ip, uint32_t port, uint32_t timeout )
 {
     return this->connect((uint32_t)ip, port, timeout);
 }
