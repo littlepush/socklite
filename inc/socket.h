@@ -289,6 +289,7 @@ public:
 
     void parse_peerinfo_from_string(const string &format_string);
     void set_peerinfo(const string &ipaddress, uint16_t port);
+    void set_peerinfo(uint32_t inaddr, uint16_t port);
 
     sl_peerinfo();
     sl_peerinfo(uint32_t inaddr, uint16_t port);

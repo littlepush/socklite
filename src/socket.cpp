@@ -252,6 +252,13 @@ void sl_peerinfo::set_peerinfo(const string &ipaddress, uint16_t port) {
     format_ += ":";
     format_ += to_string(port_);
 }
+void set_peerinfo(uint32_t inaddr, uint16_t port) {
+    ip_ = inaddr;
+    port_ = port;
+    format_ = (const string &)ip_;
+    format_ += ":";
+    format_ += to_string(port_);
+}
 
 sl_peerinfo::sl_peerinfo(): format_("0.0.0.0:0"), ipaddress(ip_), port_number(port_) {}
 sl_peerinfo::sl_peerinfo(uint32_t inaddr, uint16_t port) 
