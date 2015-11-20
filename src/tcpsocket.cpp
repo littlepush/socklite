@@ -269,10 +269,6 @@ bool sl_tcpsocket::connect( const uint32_t inaddr, uint32_t port, uint32_t timeo
         return true;
     }
 }
-bool sl_tcpsocket::connect( const sl_peerinfo &peer )
-{
-    return this->connect((uint32_t)peer.ipaddress, peer.port_number);
-}
 
 bool sl_tcpsocket::connect( const string &ipaddr, uint32_t port, uint32_t timeout )
 {

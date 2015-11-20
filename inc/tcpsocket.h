@@ -47,7 +47,6 @@ public:
 			const string &username, const string &password);
     // Connect to peer
     virtual bool connect( const uint32_t inaddr, uint32_t port, uint32_t timeout = 1000 );
-    virtual bool connect( const sl_peerinfo &peer );
     virtual bool connect( const string &ipaddr, uint32_t port, uint32_t timeout = 1000 );
     // Listen on specified port and address, default is 0.0.0.0
     virtual bool listen( uint32_t port, uint32_t ipaddr = INADDR_ANY );

@@ -316,6 +316,14 @@ void sl_socket::close()
     SL_NETWORK_CLOSESOCK(m_socket);
     m_socket = INVALIDATE_SOCKET;
 }
+bool sl_socket::connect( const sl_ip ip, uint32_t port, uint32_t timeout )
+{
+    return this->connect((uint32_t)ip, port, timeout);
+}
+bool sl_socket::connect( const sl_peerinfo &peer, uint32_t timeout )
+{
+    return this->connect((uint32_t)peer.ipaddress, peer.port_number, timeout);
+}
 
 // Set current socket reusable or not
 bool sl_socket::set_reusable( bool reusable )
