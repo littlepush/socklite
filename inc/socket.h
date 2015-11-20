@@ -212,6 +212,12 @@ char * network_domain_to_ip(const char * domain, char * output, unsigned int len
 // Translate Domain to InAddr
 unsigned int network_domain_to_inaddr(const char * domain);
 
+// Translate the ip string to an InAddr
+uint32_t network_ipstring_to_inaddr(const string &ipaddr);
+
+// Translate the InAddr to an Ip string
+void network_inaddr_to_string(uint32_t inaddr, string &ipstring);
+
 // Get localhost's computer name on LAN.
 void network_get_localhost_name( string &hostname );
 
@@ -231,6 +237,77 @@ SOCKETSTATUE socket_check_status( SOCKET_T hSo, SOCKETOPT option = SO_CHECK_READ
 // know what you are doing
 bool socket_set_linger_time(SOCKET_T so, bool onoff = true, unsigned timeout = 1);
 
+/*!
+The IP object, compatible with std::string and uint32_t
+This is a ipv4 ip address class.
+*/
+class sl_ip {
+    string          ip_;
+
+public:
+    sl_ip();
+    sl_ip(const sl_ip& rhs);
+
+    // Conversition
+    sl_ip(const string &ipaddr);
+    sl_ip(uint32_t ipaddr);
+    operator uint32_t() const;
+    operator string&();
+    operator string() const;
+    operator const string&() const;
+    operator const char *() const;
+    const char *c_str() const;
+    size_t size() const;
+
+    // Cast operator
+    sl_ip & operator = (const string &ipaddr);
+    sl_ip & operator = (uint32_t ipaddr);
+
+    // Operators
+    bool operator == (const sl_ip& rhs) const;
+    bool operator != (const sl_ip& rhs) const;
+    bool operator <(const sl_ip& rhs) const;
+    bool operator >(const sl_ip& rhs) const;
+    bool operator <=(const sl_ip& rhs) const;
+    bool operator >=(const sl_ip& rhs) const;
+};
+
+// Output
+ostream & operator << (ostream &os, const sl_ip & ip);
+
+/*!
+Peer Info, contains an IP address and a port number.
+should be output in the following format: 0.0.0.0:0
+*/
+class sl_peerinfo {
+    sl_ip           ip_;
+    uint16_t        port_;
+    string          format_;
+public:
+    const sl_ip &       ipaddress;
+    const uint16_t &    port_number;
+
+    void parse_peerinfo_from_string(const string &format_string);
+
+    sl_peerinfo();
+    sl_peerinfo(uint32_t inaddr, uint16_t port);
+    sl_peerinfo(const string &format_string);
+    sl_peerinfo(const string &ipaddr, uint16_t p);
+    sl_peerinfo(const sl_peerinfo& rhs);
+    sl_peerinfo & operator = (const sl_peerinfo& rhs);
+    sl_peerinfo & operator = (const string &format_string);
+
+    operator bool() const;
+    operator const string () const;
+    operator const char *() const;
+    const char *c_str() const;
+    size_t size() const;
+};
+
+// Output the peer info
+ostream & operator << (ostream &os, const sl_peerinfo &peer);
+
+
 // The basic virtual socket class
 class sl_socket
 {
@@ -243,7 +320,9 @@ public:
     sl_socket(bool iswrapper = false);
     virtual ~sl_socket();
     // Connect to peer
-    virtual bool connect( const string &ipaddr, uint32_t port, uint32_t = 1000 ) = 0;
+    virtual bool connect( const uint32_t inaddr, uint32_t port, uint32_t timeout = 1000 ) = 0;
+    virtual bool connect( const sl_peerinfo &peer ) = 0;
+    virtual bool connect( const string &ipaddr, uint32_t port, uint32_t timeout = 1000 ) = 0;
     // Listen on specified port and address, default is 0.0.0.0
     virtual bool listen( uint32_t port, uint32_t ipaddr = INADDR_ANY ) = 0;
     // Close the connection

@@ -46,19 +46,8 @@ sl_tcpsocket::~sl_tcpsocket()
 }
 
 // Connect to peer
-bool sl_tcpsocket::_internal_connect( const string &ipaddr, uint32_t port, uint32_t timeout )
+bool sl_tcpsocket::_internal_connect( uint32_t inaddr, uint32_t port, uint32_t timeout ) 
 {
-    if ( ipaddr.size() == 0 || port == 0 || port >= 65535 ) return false;
-    
-    const char *_addr = ipaddr.c_str();
-    uint32_t _timeout = timeout;
-
-    // Try to nslookup the host
-    unsigned int _in_addr = network_domain_to_inaddr( _addr );
-    if ( _in_addr == (unsigned int)(-1) ) {
-        return false;
-    }
-
     // Create Socket Handle
     m_socket = ::socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
     // SOCKET_T hSo = ::socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
@@ -77,7 +66,7 @@ bool sl_tcpsocket::_internal_connect( const string &ipaddr, uint32_t port, uint3
 
     struct sockaddr_in _sock_addr; 
     memset( &_sock_addr, 0, sizeof(_sock_addr) );
-    _sock_addr.sin_addr.s_addr = _in_addr;
+    _sock_addr.sin_addr.s_addr = inaddr;
     _sock_addr.sin_family = AF_INET;
     _sock_addr.sin_port = htons(port);
 
@@ -89,8 +78,8 @@ bool sl_tcpsocket::_internal_connect( const string &ipaddr, uint32_t port, uint3
     if ( ::connect( m_socket, (struct sockaddr *)&_sock_addr, 
             sizeof(_sock_addr) ) == -1 )
     {
-        struct timeval _tm = { _timeout / 1000, 
-            static_cast<int>((_timeout % 1000) * 1000) };
+        struct timeval _tm = { timeout / 1000, 
+            static_cast<int>((timeout % 1000) * 1000) };
         fd_set _fs;
         int _error = 0, len = sizeof(_error);
         FD_ZERO( &_fs );
@@ -108,13 +97,13 @@ bool sl_tcpsocket::_internal_connect( const string &ipaddr, uint32_t port, uint3
             if ( _error != 0 ) {
                 // Failed to connect
                 SL_NETWORK_CLOSESOCK( m_socket );
-				m_socket = INVALIDATE_SOCKET;
+                m_socket = INVALIDATE_SOCKET;
                 return false;
             }
         } else {
             // Failed to connect
             SL_NETWORK_CLOSESOCK( m_socket );
-			m_socket = INVALIDATE_SOCKET;
+            m_socket = INVALIDATE_SOCKET;
             return false;
         }
     }
@@ -123,6 +112,21 @@ bool sl_tcpsocket::_internal_connect( const string &ipaddr, uint32_t port, uint3
     SL_NETWORK_IOCTL_CALL(m_socket, FIONBIO, &_u);
     this->set_reusable();
     return true;
+}
+
+bool sl_tcpsocket::_internal_connect( const string &ipaddr, uint32_t port, uint32_t timeout )
+{
+    if ( ipaddr.size() == 0 || port == 0 || port >= 65535 ) return false;
+    
+    const char *_addr = ipaddr.c_str();
+
+    // Try to nslookup the host
+    unsigned int _in_addr = network_domain_to_inaddr( _addr );
+    if ( _in_addr == (unsigned int)(-1) ) {
+        return false;
+    }
+
+    return _internal_connect(_in_addr, port, timeout);
 }
 
 bool sl_tcpsocket::setup_proxy( const string &socks5_addr, uint32_t socks5_port )
@@ -204,6 +208,70 @@ bool sl_tcpsocket::setup_proxy(
 	// Now we has connected to the proxy server.
 	m_is_connected_to_proxy = true;
 	return true;
+}
+bool sl_tcpsocket::connect( const uint32_t inaddr, uint32_t port, uint32_t timeout )
+{
+    if ( m_is_connected_to_proxy == false ) {
+        return this->_internal_connect( inaddr, port, timeout );
+    } else {
+        // Establish a connection through the proxy server.
+        u_int8_t _buffer[256] = {0};
+        // Socks info
+        u_int16_t _host_port = htons((u_int16_t)port); // the port must be uint16
+
+        /* Assemble the request packet */
+        sl_socks5_connect_request _req;
+        _req.atyp = sl_socks5atyp_ipv4;
+        memcpy(_buffer, (char *)&_req, sizeof(_req));
+
+        unsigned int _pos = sizeof(_req);
+        _buffer[_pos] = sizeof(inaddr);
+        _pos += 1;
+        //*((uint32_t *)(_buffer + _pos)) = inaddr;
+        memcpy(_buffer + _pos, &inaddr, sizeof(inaddr));
+        _pos += sizeof(inaddr);
+        memcpy(_buffer + _pos, &_host_port, sizeof(_host_port));
+        _pos += sizeof(_host_port);
+        
+        if (write(m_socket, _buffer, _pos) == -1) {
+            return false;
+        }
+
+        /*
+         * The maximum size of the protocol message we are waiting for is 10
+         * bytes -- VER[1], REP[1], RSV[1], ATYP[1], BND.ADDR[4] and
+         * BND.PORT[2]; see RFC 1928, section "6. Replies" for more details.
+         * Everything else is already a part of the data we are supposed to
+         * deliver to the requester. We know that BND.ADDR is exactly 4 bytes
+         * since as you can see below, we accept only ATYP == 1 which specifies
+         * that the IPv4 address is in a binary format.
+         */
+        sl_socks5_ipv4_response _resp;
+        if (read(m_socket, (char *)&_resp, sizeof(_resp)) == -1) {
+            return false;
+        }
+
+        /* Check the server's version. */
+        if ( _resp.ver != 0x05 ) {
+            (void)fprintf(stderr, "Unsupported SOCKS version: %x\n", _resp.ver);
+            return false;
+        }
+        if (_resp.rep != sl_socks5rep_successed) {
+            fprintf(stderr, "%s\n", sl_socks5msg((sl_socks5rep)_resp.rep));
+            return false;
+        }
+
+        /* Check ATYP */
+        if ( _resp.atyp != sl_socks5atyp_ipv4 ) {
+            fprintf(stderr, "ssh-socks5-proxy: Address type not supported: %u\n", _resp.atyp);
+            return false;
+        }
+        return true;
+    }
+}
+bool sl_tcpsocket::connect( const sl_peerinfo &peer )
+{
+    return this->connect((uint32_t)peer.ipaddress, peer.port_number);
 }
 
 bool sl_tcpsocket::connect( const string &ipaddr, uint32_t port, uint32_t timeout )

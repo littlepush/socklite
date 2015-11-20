@@ -34,6 +34,7 @@ protected:
     bool m_is_connected_to_proxy;
 
     // Internal connect to peer
+    bool _internal_connect( uint32_t inaddr, uint32_t port, uint32_t timeout = 1000 );
     bool _internal_connect( const string &ipaddr, uint32_t port, uint32_t timeout = 1000 );
 public:
     sl_tcpsocket(bool iswrapper = false);
@@ -45,6 +46,8 @@ public:
 	bool setup_proxy( const string &socks5_addr, uint32_t socks5_port,
 			const string &username, const string &password);
     // Connect to peer
+    virtual bool connect( const uint32_t inaddr, uint32_t port, uint32_t timeout = 1000 );
+    virtual bool connect( const sl_peerinfo &peer );
     virtual bool connect( const string &ipaddr, uint32_t port, uint32_t timeout = 1000 );
     // Listen on specified port and address, default is 0.0.0.0
     virtual bool listen( uint32_t port, uint32_t ipaddr = INADDR_ANY );

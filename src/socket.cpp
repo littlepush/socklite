@@ -64,6 +64,25 @@ unsigned int network_domain_to_inaddr(const char * domain)
     return inet_addr(_c_address);
 }
 
+// Translate the ip string to an InAddr
+uint32_t network_ipstring_to_inaddr(const string &ipaddr)
+{
+    return inet_addr(ipaddr.c_str());
+}
+
+// Translate the InAddr to an Ip string
+void network_inaddr_to_string(uint32_t inaddr, string &ipstring)
+{
+    char _ip_[16] = {0};
+    sprintf( _ip_, "%u.%u.%u.%u",
+        (inaddr >> (0 * 8)) & 0x00FF,
+        (inaddr >> (1 * 8)) & 0x00FF,
+        (inaddr >> (2 * 8)) & 0x00FF,
+        (inaddr >> (3 * 8)) & 0x00FF 
+    );
+    ipstring = string(_ip_);
+}
+
 // Get localhost's computer name on LAN.
 void network_get_localhost_name( string &hostname )
 {
@@ -157,6 +176,123 @@ bool socket_set_linger_time(SOCKET_T so, bool onoff, unsigned timeout)
 {
 	struct linger _sol = { (onoff ? 1 : 0), (int)timeout };
 	return ( setsockopt(so, SOL_SOCKET, SO_LINGER, &_sol, sizeof(_sol)) == 0 );
+}
+
+sl_ip::sl_ip() {}
+sl_ip::sl_ip(const sl_ip& rhs) : ip_(rhs.ip_) {}
+
+// Conversition
+sl_ip::sl_ip(const string &ipaddr) : ip_(ipaddr) {}
+sl_ip::sl_ip(uint32_t ipaddr) {
+    network_inaddr_to_string(ipaddr, ip_);
+}
+sl_ip::operator uint32_t() const {
+    return network_ipstring_to_inaddr(ip_);
+}
+sl_ip::operator string&() { return ip_; }
+sl_ip::operator string() const { return ip_; }
+sl_ip::operator const string&() const { return ip_; }
+sl_ip::operator const char *() const { return ip_.c_str(); }
+const char * sl_ip::c_str() const { return ip_.c_str(); }
+size_t sl_ip::size() const { return ip_.size(); }
+// Cast operator
+sl_ip & sl_ip::operator = (const string &ipaddr) {
+    ip_ = ipaddr; 
+    return *this;
+}
+
+sl_ip & sl_ip::operator = (uint32_t ipaddr) {
+    network_inaddr_to_string(ipaddr, ip_);
+    return *this;
+}
+bool sl_ip::operator == (const sl_ip& rhs) const
+{
+    return ip_ == rhs.ip_;
+}
+bool sl_ip::operator != (const sl_ip& rhs) const
+{
+    return ip_ != rhs.ip_;
+}
+bool sl_ip::operator <(const sl_ip& rhs) const
+{
+    return ntohl(*this) < ntohl(rhs);
+}
+bool sl_ip::operator >(const sl_ip& rhs) const
+{
+    return ntohl(*this) > ntohl(rhs);
+}
+bool sl_ip::operator <=(const sl_ip& rhs) const
+{
+    return ntohl(*this) <= ntohl(rhs);
+}
+bool sl_ip::operator >=(const sl_ip& rhs) const
+{
+    return ntohl(*this) >= ntohl(rhs);
+}
+
+ostream & operator << (ostream &os, const sl_ip & ip) {
+    os << (const string&)ip;
+    return os;
+}
+
+// Peer Info
+void sl_peerinfo::parse_peerinfo_from_string(const string &format_string) {
+    for ( size_t i = 0; i < format_string.size(); ++i ) {
+        if ( format_string[i] != ':' ) continue;
+        ip_ = format_string.substr(0, i);
+        port_ = stoi(format_string.substr(i + 1), nullptr, 10);
+        format_ = format_string;
+        break;
+    }
+}
+
+sl_peerinfo::sl_peerinfo(): format_("0.0.0.0:0"), ipaddress(ip_), port_number(port_) {}
+sl_peerinfo::sl_peerinfo(uint32_t inaddr, uint16_t port) 
+: ip_(inaddr), port_(port), ipaddress(ip_), port_number(port_) { 
+    format_ = (const string &)ip_;
+    format_ += ":";
+    format_ += to_string(port_);
+}
+sl_peerinfo::sl_peerinfo(const string &format_string) : ipaddress(ip_), port_number(port_) {
+    parse_peerinfo_from_string(format_string);
+}
+sl_peerinfo::sl_peerinfo(const string &ipstring, uint16_t port) 
+: ip_(ipstring), port_(port), ipaddress(ip_), port_number(port_) {
+    format_ = (const string &)ip_;
+    format_ += ":";
+    format_ += to_string(port_);
+}
+sl_peerinfo::sl_peerinfo(const sl_peerinfo& rhs)
+: ip_(rhs.ip_), port_(rhs.port_), ipaddress(ip_), port_number(port_) { }
+
+sl_peerinfo & sl_peerinfo::operator = (const sl_peerinfo& rhs) {
+    ip_ = rhs.ip_;
+    port_ = rhs.port_;
+    format_ = rhs.format_;
+    return *this;
+}
+sl_peerinfo & sl_peerinfo::operator = (const string &format_string) {
+    parse_peerinfo_from_string(format_string);
+    return *this;
+}
+
+sl_peerinfo::operator bool() const { return port_ > 0 && port_ <= 65535; }
+sl_peerinfo::operator const string () const { 
+    return format_;
+}
+sl_peerinfo::operator const char *() const {
+    return format_.c_str();
+}
+const char * sl_peerinfo::c_str() const {
+    return format_.c_str();
+}
+size_t sl_peerinfo::size() const {
+    return format_.size();
+}
+
+ostream & operator << (ostream &os, const sl_peerinfo &peer) {
+    os << peer.operator const string();
+    return os;
 }
 
 sl_socket::sl_socket(bool iswrapper) : m_iswrapper(iswrapper), m_socket(INVALIDATE_SOCKET) { }

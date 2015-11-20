@@ -57,6 +57,31 @@ uint32_t sl_udpsocket::port() const
 }
 
 // Connect to peer
+bool sl_udpsocket::connect( const uint32_t inaddr, uint32_t port, uint32_t timeout )
+{
+    memset( &m_sock_addr, 0, sizeof(m_sock_addr) );
+    m_sock_addr.sin_family = AF_INET;
+    m_sock_addr.sin_port = htons(port);
+    m_sock_addr.sin_addr.s_addr = inaddr;
+
+    // Create Socket Handle
+    m_socket = ::socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
+    if ( SOCKET_NOT_VALIDATE(m_socket) ) {
+        return false;
+    }
+    // Bind to 0, so we can get the port number by getsockname
+    struct sockaddr_in _usin = {};
+    _usin.sin_family = AF_INET;
+    _usin.sin_addr.s_addr = htonl(INADDR_ANY);
+    _usin.sin_port = 0;
+    bind(m_socket, (struct sockaddr *)&_usin, sizeof(_usin));
+
+    return true;
+}
+bool sl_udpsocket::connect( const sl_peerinfo &peer )
+{
+    return this->connect((uint32_t)peer.ipaddress, peer.port_number);
+}
 bool sl_udpsocket::connect( const string &ipaddr, uint32_t port, uint32_t timeout )
 {
     memset( &m_sock_addr, 0, sizeof(m_sock_addr) );
