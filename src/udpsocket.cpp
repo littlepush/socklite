@@ -21,6 +21,8 @@
 */
 
 #include "udpsocket.h"
+#include "poller.h"
+#include "events.h"
 
 sl_udpsocket::sl_udpsocket(bool iswrapper)
 : sl_socket(iswrapper)
@@ -125,6 +127,17 @@ bool sl_udpsocket::listen( uint32_t port, uint32_t ipaddr )
         return false;
     }
     return true;
+}
+
+void sl_udpsocket::monitor()
+{
+    if ( SOCKET_NOT_VALIDATE(m_socket) ) return;
+    if ( m_is_listening ) {
+        sl_poller::server().bind_udp_server(m_socket);
+    } else {
+        m_iswrapper = true;
+        sl_poller::server().monitor_socket(m_socket, true);
+    }
 }
 
 // Read data from the socket until timeout or get any data.

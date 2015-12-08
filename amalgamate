@@ -18,10 +18,12 @@ function split_headerfile() {
 	sp=$(cat $fname | grep -n "#if" | head -n 1 | awk -F":" '{print $1}')
 	ep=$(cat $fname | grep -n "#endif" | tail -n 1 | awk -F":" '{print $1}')
 	sed -n "${sp},${ep}p" $fname |
-		grep -v "#include \"socket.h\"" >> $fheader
+		grep -v "#include \"socket.h\"" |
+		grep -v "#include \"log.h\"" | 
+		grep -v "#include \"thread.h\"" >> $fheader
 }
 
-headerfiles=("socket.h" "socks5.h" "poller.h" "tcpsocket.h" "udpsocket.h")
+headerfiles=( "thread.h" "log.h" "socket.h" "events.h" "socks5.h" "poller.h" "tcpsocket.h" "udpsocket.h")
 
 for h in ${headerfiles[@]}; do
 	echo "// inc/${h}" >> $fheader
@@ -49,10 +51,11 @@ function split_sourcefile() {
 	ep=$(cat $fname | wc -l)
 	sed -n "${sp},${ep}p" $fname |
 		grep -v "#include \"socks5.h\"" |
-		grep -v "#include \"tcpsocket.h\"" >> $fsource
+		grep -v "#include \"tcpsocket.h\"" |
+		grep -v "#include \"thread.h\"" >> $fsource
 }
 
-sourcefiles=("socket.cpp" "poller.cpp" "tcpsocket.cpp" "udpsocket.cpp" "socks5.cpp")
+sourcefiles=( "thread.cpp" "log.cpp" "socket.cpp" "events.cpp" "socks5.cpp" "poller.cpp" "tcpsocket.cpp" "udpsocket.cpp")
 
 for c in ${sourcefiles[@]}; do
 	echo "// src/${c}" >> $fsource

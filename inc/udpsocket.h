@@ -51,6 +51,10 @@ public:
     virtual bool connect( const string &ipaddr, uint32_t port, uint32_t timeout = 1000 );
     // Listen on specified port and address, default is 0.0.0.0
     virtual bool listen( uint32_t port, uint32_t ipaddr = INADDR_ANY );
+    
+    // Add current socket to the async monitor, current sl_socket
+    // will be set to wrapper automatically.9
+    virtual void monitor();
 
     // Read data from the socket until timeout or get any data.
     virtual SO_READ_STATUE read_data( string &buffer, uint32_t timeout = 1000 );

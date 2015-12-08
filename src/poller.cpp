@@ -20,10 +20,11 @@
     or @me on twitter: @littlepush
 */
 
+#include "events.h"
 #include "poller.h"
 
 sl_poller::sl_poller()
-	:m_fd(-1), m_events(NULL)
+	:m_fd(-1), m_events(NULL), m_runloop_status(false), m_runloop_ret(0)
 {
 #if SL_TARGET_LINUX
 	m_fd = epoll_create1(0);

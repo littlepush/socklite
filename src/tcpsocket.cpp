@@ -28,6 +28,7 @@
 #endif
 
 #include "socks5.h"
+#include "poller.h"
 
 sl_tcpsocket::sl_tcpsocket(bool iswrapper) 
     : sl_socket(iswrapper),
@@ -45,6 +46,55 @@ sl_tcpsocket::~sl_tcpsocket()
 {
 }
 
+void sl_tcpsocket::_internal_async_connect( 
+    uint32_t inaddr, uint32_t port, uint32_t timeout, 
+    sl_socket_event_handler done, sl_socket_event_handler failed ) {
+
+    // Create Socket Handle
+    m_socket = ::socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
+    if ( SOCKET_NOT_VALIDATE(m_socket) ) {
+        // Failed to create the socket
+        return;
+    }
+
+    // Set With TCP_NODELAY
+    int flag = 1;
+    if( setsockopt( m_socket, IPPROTO_TCP, 
+        TCP_NODELAY, (const char *)&flag, sizeof(int) ) == -1 )
+    {
+        SL_NETWORK_CLOSESOCK( m_socket );
+        return;
+    }
+
+    this->set_nonblocking(true);
+    this->set_reusable(true);
+
+    struct sockaddr_in _sock_addr; 
+    memset( &_sock_addr, 0, sizeof(_sock_addr) );
+    _sock_addr.sin_addr.s_addr = inaddr;
+    _sock_addr.sin_family = AF_INET;
+    _sock_addr.sin_port = htons(port);
+
+    // Bind the callback
+    sl_handler_set _s;
+    memset((void *)&_s, 0, sizeof(sl_handler_set));
+    _s.on_connect = done;
+    _s.on_failed = failed;
+    sl_event_bind_handler(m_socket, move(_s));
+
+    if ( ::connect( m_socket, (struct sockaddr *)&_sock_addr, 
+        sizeof(_sock_addr) ) == -1 )
+    {
+        // Monitor current socket and wait for the poller to call the connect callback
+        this->monitor();
+    }
+    else
+    {
+        // Add to the next run loop for connected event.
+        sl_events::add_tcpevent(m_socket, SL_EVENT_CONNECT);
+    }
+    return;
+}
 // Connect to peer
 bool sl_tcpsocket::_internal_connect( uint32_t inaddr, uint32_t port, uint32_t timeout ) 
 {
@@ -321,22 +371,57 @@ bool sl_tcpsocket::connect( const string &ipaddr, uint32_t port, uint32_t timeou
 
         /* Check the server's version. */
 		if ( _resp.ver != 0x05 ) {
-            (void)fprintf(stderr, "Unsupported SOCKS version: %x\n", _resp.ver);
+            lerror << "Unsupported SOCKS version: " << _resp.ver << lend;
             return false;
         }
         if (_resp.rep != sl_socks5rep_successed) {
-			fprintf(stderr, "%s\n", sl_socks5msg((sl_socks5rep)_resp.rep));
+            lerror << sl_socks5msg((sl_socks5rep)_resp.rep) << lend;
 			return false;
 		}
 
         /* Check ATYP */
 		if ( _resp.atyp != sl_socks5atyp_ipv4 ) {
-            fprintf(stderr, "ssh-socks5-proxy: Address type not supported: %u\n", _resp.atyp);
+            lerror << "ssh-socks5-proxy: Address type not supported: " << _resp.atyp << lend;
             return false;
         }
         return true;
     }
 }
+
+void sl_tcpsocket::async_connect( 
+    const sl_peerinfo &peer,
+    uint32_t timeout, 
+    sl_socket_event_handler done,
+    sl_socket_event_handler failed)
+{
+    if ( m_is_connected_to_proxy == false ) {
+        this->_internal_async_connect(peer.ipaddress, peer.port_number, timeout, done, failed);
+    } else {
+        // // Establish a connection through the proxy server.
+        // u_int8_t _buffer[256] = {0};
+        // // Socks info
+        // u_int16_t _host_port = htons((u_int16_t)peer.port_number); // the port must be uint16
+
+        // /* Assemble the request packet */
+        // sl_socks5_connect_request _req;
+        // _req.atyp = sl_socks5atyp_dname;
+        // memcpy(_buffer, (char *)&_req, sizeof(_req));
+
+        // unsigned int _pos = sizeof(_req);
+        // _buffer[_pos] = (uint8_t)ipaddr.size();
+        // _pos += 1;
+        // memcpy(_buffer + _pos, ipaddr.data(), ipaddr.size());
+        // _pos += ipaddr.size();
+        // memcpy(_buffer + _pos, &_host_port, sizeof(_host_port));
+        // _pos += sizeof(_host_port);
+        
+        // if (write(m_socket, _buffer, _pos) == -1) {
+        //     return false;
+        // }
+
+    }
+}
+
 // Listen on specified port and address, default is 0.0.0.0
 bool sl_tcpsocket::listen( uint32_t port, uint32_t ipaddr )
 {
@@ -360,9 +445,20 @@ bool sl_tcpsocket::listen( uint32_t port, uint32_t ipaddr )
         SL_NETWORK_CLOSESOCK( m_socket );
         return false;
     }
+    m_is_listening = true;
     return true;
 }
 
+void sl_tcpsocket::monitor()
+{
+    if ( SOCKET_NOT_VALIDATE(m_socket) ) return;
+    if ( m_is_listening ) {
+        sl_poller::server().bind_tcp_server(m_socket);
+    } else {
+        m_iswrapper = true;
+        sl_poller::server().monitor_socket(m_socket, true);
+    }
+}
 // Try to get the original destination
 bool sl_tcpsocket::get_original_dest( string &address, uint32_t &port )
 {

@@ -22,6 +22,7 @@
 
 #include "socket.h"
 // #include <execinfo.h>
+#include <map>
 
 // In No-Windows
 #ifndef FAR
@@ -309,7 +310,7 @@ ostream & operator << (ostream &os, const sl_peerinfo &peer) {
     return os;
 }
 
-sl_socket::sl_socket(bool iswrapper) : m_iswrapper(iswrapper), m_socket(INVALIDATE_SOCKET) { }
+sl_socket::sl_socket(bool iswrapper) : m_iswrapper(iswrapper), m_is_listening(false), m_socket(INVALIDATE_SOCKET) { }
 
 // Virtual destructure
 sl_socket::~sl_socket()
@@ -329,6 +330,7 @@ void sl_socket::close()
     if ( SOCKET_NOT_VALIDATE(m_socket) ) return;
     SL_NETWORK_CLOSESOCK(m_socket);
     m_socket = INVALIDATE_SOCKET;
+    m_is_listening = false;
 }
 
 // Set current socket reusable or not
@@ -367,6 +369,21 @@ bool sl_socket::set_socketbufsize( unsigned int rmem, unsigned int wmem )
                 (char *)&wmem, sizeof(wmem));
     }
     return true;
+}
+
+void sl_socket::dump()
+{
+    uint32_t _local_port, _peer_port, _peer_addr;
+    network_peer_info_from_socket(m_socket, _peer_addr, _peer_port);
+    network_sock_info_from_socket(m_socket, _local_port);
+    int _type, _len = sizeof(int);
+    getsockopt( m_socket, SOL_SOCKET, SO_TYPE, (char *)&_type, (socklen_t *)&_len);
+    if ( _type == SOCK_STREAM ) {
+        ldebug << "[SOCK_DUMP:TCP] from 127.0.0.1:";
+    } else {
+        ldebug << "[SOCK_DUMP:UDP] from 127.0.0.1:";
+    }
+    ldebug << _local_port << "=> " << sl_ip(_peer_addr).c_str() << ":" << _peer_port << lend;
 }
 
 /*

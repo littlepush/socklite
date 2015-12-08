@@ -26,7 +26,7 @@
 #define __SOCK_LITE_POLLER_H__
 
 #include "socket.h"
-
+    
 #if SL_TARGET_LINUX
 #include <sys/epoll.h>
 #elif SL_TARGET_MAC
@@ -41,17 +41,24 @@
 
 #define CO_MAX_SO_EVENTS		1024
 
+// All Socket Event
 enum SL_EVENT_ID {
-	SL_EVENT_ACCEPT			= 0,
-	SL_EVENT_DATA			= 1,
-	SL_EVENT_FAILED			= 2
+    SL_EVENT_ACCEPT         = 0x01,
+    SL_EVENT_DATA           = 0x02,    // READ
+    SL_EVENT_READ           = 0x02,
+    SL_EVENT_FAILED         = 0x04,
+    SL_EVENT_CONNECT        = 0x08,
+    SL_EVENT_WRITE          = 0x10,
+
+    SL_EVENT_DEFAULT        = (SL_EVENT_ACCEPT | SL_EVENT_DATA | SL_EVENT_FAILED),
+    SL_EVENT_ALL            = 0x1F
 };
 
 typedef struct tag_sl_event {
-	SOCKET_T				so;
-	SOCKET_T				source;
-	SL_EVENT_ID				event;
-	int						socktype;
+    SOCKET_T                so;
+    SOCKET_T                source;
+    SL_EVENT_ID             event;
+    int                     socktype;
     struct sockaddr_in      address;    // For UDP socket usage.
 } sl_event;
 
@@ -70,16 +77,19 @@ protected:
 	std::map<SOCKET_T, bool>	m_tcp_svr_map;
 	std::map<SOCKET_T, bool>	m_udp_svr_map;
 
+    bool                m_runloop_status;
+    int                 m_runloop_ret;
+
 protected:
 	sl_poller();
 public:
 	~sl_poller();
-
+        
 	// Bind the server side socket
 	void bind_tcp_server( SOCKET_T so );
 	void bind_udp_server( SOCKET_T so );
 
-	// Try to fetch new events
+	// Try to fetch new events(Only return SL_EVENT_DEFAULT)
 	size_t fetch_events( earray &events,  unsigned int timedout = 1000 );
 
 	// Start to monitor a socket hander

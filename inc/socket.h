@@ -78,6 +78,8 @@
 #include <sys/types.h>
 #include <sys/timeb.h>
 #include <sys/stat.h>
+#include <iostream>
+#include <map>
 
 #include <iostream>
 #include <string>
@@ -92,6 +94,12 @@ using namespace std;
 #include <stddef.h>
 #include <sys/time.h>
 #endif
+
+// Use the Cpp Utility Log
+#include "log.h"
+#include "thread.h"
+
+using namespace cpputility;
 
 // Linux Thread, pit_t
 #if SL_TARGET_LINUX
@@ -315,6 +323,7 @@ class sl_socket
 {
 protected:
     bool m_iswrapper;
+    bool m_is_listening;
 public:
     // The socket handler
     SOCKET_T  m_socket;
@@ -343,6 +352,12 @@ public:
     bool set_nonblocking( bool nonblocking = true );
     // Set socket buffer, 0 means remine default
     bool set_socketbufsize( unsigned int rmem = 0, unsigned int wmem = 0 );
+
+    // Add current socket to the async monitor, current sl_socket
+    // will be set to wrapper automatically.9
+    virtual void monitor() = 0;
+
+    virtual void dump();
 
     // Read data from the socket until timeout or get any data.
     virtual SO_READ_STATUE read_data( string &buffer, uint32_t timeout = 1000 ) = 0;

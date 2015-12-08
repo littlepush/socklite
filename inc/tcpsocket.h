@@ -26,6 +26,8 @@
 #define __SOCK_LITE_TCPSOCKET_H__
 
 #include "socket.h"
+#include "events.h"
+#include "poller.h"
 
 // Tcp socket for clean dns use.
 class sl_tcpsocket : public sl_socket
@@ -36,6 +38,9 @@ protected:
     // Internal connect to peer
     bool _internal_connect( uint32_t inaddr, uint32_t port, uint32_t timeout = 1000 );
     bool _internal_connect( const string &ipaddr, uint32_t port, uint32_t timeout = 1000 );
+    void _internal_async_connect( 
+        uint32_t inaddr, uint32_t port, uint32_t timeout, 
+        sl_socket_event_handler done, sl_socket_event_handler failed );
 public:
     sl_tcpsocket(bool iswrapper = false);
 	sl_tcpsocket(SOCKET_T so, bool iswrapper = true);
@@ -50,6 +55,17 @@ public:
     virtual bool connect( const sl_ip& ip, uint32_t port, uint32_t timeout = 1000 );
     virtual bool connect( const sl_peerinfo &peer, uint32_t timeout = 1000 );
     virtual bool connect( const string &ipaddr, uint32_t port, uint32_t timeout = 1000 );
+
+    virtual void async_connect( 
+        const sl_peerinfo &peer,
+        uint32_t timeout, 
+        sl_socket_event_handler done,
+        sl_socket_event_handler failed);
+
+    // Add current socket to the async monitor, current sl_socket
+    // will be set to wrapper automatically.9
+    virtual void monitor();
+
     // Listen on specified port and address, default is 0.0.0.0
     virtual bool listen( uint32_t port, uint32_t ipaddr = INADDR_ANY );
 
