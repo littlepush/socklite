@@ -22,6 +22,7 @@
 
 #include "thread.h"
 #include <map>
+#include <iostream>
 
 #ifdef SOCK_LITE_INTEGRATION_THREAD
 
@@ -40,9 +41,10 @@ namespace cpputility {
         }
     }
     void set_signal_handler() {
-        __g_mutex().lock();
     #ifdef __APPLE__
         signal(SIGINT, __h_signal);
+        signal(SIGINT, __h_signal);
+        signal(SIGQUIT, __h_signal);
     #elif ( defined WIN32 | defined _WIN32 | defined WIN64 | defined _WIN64 )
         // nothing
     #else
@@ -57,6 +59,7 @@ namespace cpputility {
         signal(SIGINT, __h_signal);
         signal(SIGQUIT, __h_signal);
     #endif
+        __g_mutex().lock();
     }
 
     void wait_for_exit_signal() {
@@ -95,13 +98,23 @@ namespace cpputility {
     bool this_thread_is_running() {
         lock_guard<mutex> _(__g_infom_mutex());
         auto _it = __g_threadinfo().find(this_thread::get_id());
-        if ( _it == end(__g_threadinfo()) ) return false;
+        if ( _it == end(__g_threadinfo()) ) { return false; }
         lock_guard<mutex>(*_it->second.first);
         return *_it->second.second;
     }
 
     thread_agent::thread_agent() { register_this_thread(); }
     thread_agent::~thread_agent() { unregister_this_thread(); }
+
+    signal_agent::signal_agent(signal_agent::before_exit_t cb) : exit_callback_(cb) { 
+        set_signal_handler();
+    }
+    signal_agent::~signal_agent() {
+        wait_for_exit_signal();
+        join_all_threads();
+        exit_callback_();
+        usleep(100000); // sleep 100ms before exit
+    }
 }
 
 #endif

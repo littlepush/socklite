@@ -169,22 +169,24 @@ size_t sl_poller::fetch_events( sl_poller::earray &events, unsigned int timedout
 #elif SL_TARGET_MAC
 			_e.so = _pe->ident;
 #endif
+			ldebug << "get event for socket: " << _e.so << lend;
 			int _error = 0, _len = sizeof(int);
 			getsockopt( _e.so, SOL_SOCKET, SO_ERROR, 
 					(char *)&_error, (socklen_t *)&_len);
-			_e.event = (_error != 0) ? SL_EVENT_FAILED : SL_EVENT_DATA;
 			if ( _error == 0 ) {
 				// Check if is read or write
 #if SL_TARGET_LINUX
-				if ( _pe->events & EPOLLOUT ) _e.event = SL_EVENT_WRITE;
-				else _e.event = SL_EVENT_DATA;
+				if ( _pe->events & EPOLLIN ) _e.event = SL_EVENT_DATA;
+				else _e.event = SL_EVENT_WRITE;
 #elif SL_TARGET_MAC
-				if ( _pe->flags & EVFILT_WRITE ) _e.event = SL_EVENT_WRITE;
-				else _e.event = SL_EVENT_DATA;
+				if ( _pe->filter & EVFILT_READ ) _e.event = SL_EVENT_DATA;
+				else _e.event = SL_EVENT_WRITE;
 #endif
 			} else {
 				_e.event = SL_EVENT_FAILED;
 			}
+
+			ldebug << "did get r/w event for socket: " << _e.so << ", event: " << _e.event << lend;
 			
             int _type;
 			getsockopt( _e.so, SOL_SOCKET, SO_TYPE,
@@ -223,8 +225,14 @@ void sl_poller::monitor_socket( SOCKET_T so, bool oneshot, bool isreset ) {
 	if ( oneshot ) {
 		_flags |= EV_ONESHOT;
 	}
-	EV_SET(&_ke, so, EVFILT_READ | EVFILT_WRITE, _flags, 0, 0, NULL);
-	kevent(m_fd, &_ke, 1, NULL, 0, NULL);
+	EV_SET(&_ke, so, EVFILT_READ, _flags, 0, 0, NULL);
+	if ( -1 == kevent(m_fd, &_ke, 1, NULL, 0, NULL) ) {
+		lerror << "failed to monitor the socket " << so << lend;
+	}
+	EV_SET(&_ke, so, EVFILT_WRITE, _flags, 0, 0, NULL);
+	if ( -1 == kevent(m_fd, &_ke, 1, NULL, 0, NULL) ) {
+		lerror << "failed to monitor the socket " << so << lend;
+	}
 #endif
 }
 

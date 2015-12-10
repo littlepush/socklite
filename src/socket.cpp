@@ -305,6 +305,12 @@ size_t sl_peerinfo::size() const {
     return format_.size();
 }
 
+const sl_peerinfo & sl_peerinfo::nan()
+{
+    static sl_peerinfo _nan(0, 0);
+    return _nan;
+}
+
 ostream & operator << (ostream &os, const sl_peerinfo &peer) {
     os << peer.operator const string();
     return os;

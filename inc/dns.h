@@ -212,20 +212,6 @@ bool dns_is_query(const char *pkg, unsigned int len);
 
 #endif
 
-// DNS Method for socklite internal usage
-#ifndef __SOCK_LITE_DNS_H__
-#define __SOCK_LITE_DNS_H__
-
-#include "raw.h"
-
-//typedef void (*async_dns_handler)(const vector<sl_ip>& ipaddr);
-typedef std::function<void(const vector<sl_ip> &)>      async_dns_handler;
-
-// Try to get the dns result async
-void sl_async_gethostname(const string& host, async_dns_handler fp);
-
-#endif
-
 /*
  Push Chen.
  littlepush@gmail.com

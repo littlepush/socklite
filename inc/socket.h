@@ -312,6 +312,9 @@ public:
     operator const char *() const;
     const char *c_str() const;
     size_t size() const;
+
+    // Get an empty peer info
+    static const sl_peerinfo & nan();
 };
 
 // Output the peer info

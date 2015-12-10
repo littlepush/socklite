@@ -101,6 +101,7 @@ bool sl_tcp_socket_connect(SOCKET_T tso, const sl_peerinfo& peer, sl_socket_even
             return false;
         } else {
             // Monitor the socket, the poller will invoke on_connect when the socket is connected or failed.
+            ldebug << "monitor tcp socket " << tso << " for connecting" << lend;
             sl_poller::server().monitor_socket(tso, true);
         }
     } else {
@@ -109,95 +110,150 @@ bool sl_tcp_socket_connect(SOCKET_T tso, const sl_peerinfo& peer, sl_socket_even
     }
     return true;
 }
+bool sl_tcp_socket_connect(SOCKET_T tso, const vector<sl_ip> &iplist, uint16_t port, uint32_t index, sl_socket_event_handler callback) {
+    bool _retval = true;
+    do {
+        ldebug << "iplist count: " << iplist.size() << ", current index: " << index << lend;
+        if ( iplist.size() <= index ) return false;
+        sl_peerinfo _pi((const string &)iplist[index], port);
+        ldebug << "try to connect to " << _pi << ", this is the " << index << " item in iplist" << lend;
+        _retval = sl_tcp_socket_connect(tso, sl_peerinfo((const string &)iplist[index], port), [iplist, port, index, callback](sl_event e) {
+            if ( e.event == SL_EVENT_FAILED ) {
+                // go to next
+                if ( !sl_tcp_socket_connect(e.so, iplist, port, index + 1, callback) ) {
+                    e.event = SL_EVENT_FAILED;
+                    callback(e);
+                }
+            } else {
+                // Connected
+                callback(e);
+            }
+        });
+        if ( _retval == false ) ++index;
+    } while ( _retval == false );
+    return _retval;
+}
 bool sl_tcp_socket_connect(SOCKET_T tso, const sl_peerinfo& socks5, const string& host, uint16_t port, sl_socket_event_handler callback)
 {
-    return ( !sl_tcp_socket_connect(tso, socks5, [&host, port, callback](sl_event e){
-        if ( e.event == SL_EVENT_FAILED ) {
-            callback(e); return;
-        }
-        sl_socks5_noauth_request _req;
-        // Exchange version info
-        if (write(e.so, (char *)&_req, sizeof(_req)) < 0) {
-            e.event = SL_EVENT_FAILED; callback(e); return;
-        }
-
-        sl_tcp_socket_monitor(e.so, [&host, port, callback](sl_event e) {
+    if ( socks5 ) {
+        ldebug << "try to connect via a socks5 proxy: " << socks5 << lend;
+        return ( !sl_tcp_socket_connect(tso, socks5, [socks5, &host, port, callback](sl_event e){
             if ( e.event == SL_EVENT_FAILED ) {
+                lerror << "the socks5 proxy cannot be connected" << socks5 << lend;
                 callback(e); return;
             }
-            string _pkg;
-            if ( !sl_tcp_socket_read(e.so, _pkg) ) {
-                e.event = SL_EVENT_FAILED; callback(e); return;
-            }
-            const sl_socks5_handshake_response* _resp = (const sl_socks5_handshake_response *)_pkg.c_str();
-            // This api is for no-auth proxy
-            if ( _resp->ver != 0x05 && _resp->method != sl_method_noauth ) {
-                lerror << "unsupported authentication method" << lend;
+            sl_socks5_noauth_request _req;
+            // Exchange version info
+            if (write(e.so, (char *)&_req, sizeof(_req)) < 0) {
                 e.event = SL_EVENT_FAILED; callback(e); return;
             }
 
-            // Send the connect request
-            // Establish a connection through the proxy server.
-            uint8_t _buffer[256] = {0};
-            // Socks info
-            uint16_t _host_port = htons(port); // the port must be uint16
-
-            /* Assemble the request packet */
-            sl_socks5_connect_request _req;
-            _req.atyp = sl_socks5atyp_dname;
-            memcpy(_buffer, (char *)&_req, sizeof(_req));
-
-            unsigned int _pos = sizeof(_req);
-            _buffer[_pos] = (uint8_t)host.size();
-            _pos += 1;
-            memcpy(_buffer + _pos, host.data(), host.size());
-            _pos += host.size();
-            memcpy(_buffer + _pos, &_host_port, sizeof(_host_port));
-            _pos += sizeof(_host_port);
-            
-            if (write(e.so, _buffer, _pos) == -1) {
-                e.event = SL_EVENT_FAILED; callback(e); return;
-            }
-
-            // Wait for the socks5 server's response
-            sl_tcp_socket_monitor(e.so, [callback](sl_event e) {
+            sl_tcp_socket_monitor(e.so, [&host, port, callback](sl_event e) {
                 if ( e.event == SL_EVENT_FAILED ) {
                     callback(e); return;
                 }
-                /*
-                 * The maximum size of the protocol message we are waiting for is 10
-                 * bytes -- VER[1], REP[1], RSV[1], ATYP[1], BND.ADDR[4] and
-                 * BND.PORT[2]; see RFC 1928, section "6. Replies" for more details.
-                 * Everything else is already a part of the data we are supposed to
-                 * deliver to the requester. We know that BND.ADDR is exactly 4 bytes
-                 * since as you can see below, we accept only ATYP == 1 which specifies
-                 * that the IPv4 address is in a binary format.
-                 */
                 string _pkg;
-                if (!sl_tcp_socket_read(e.so, _pkg)) {
+                if ( !sl_tcp_socket_read(e.so, _pkg) ) {
                     e.event = SL_EVENT_FAILED; callback(e); return;
                 }
-                const sl_socks5_ipv4_response* _resp = (const sl_socks5_ipv4_response *)_pkg.c_str();
-
-                /* Check the server's version. */
-                if ( _resp->ver != 0x05 ) {
-                    lerror << "Unsupported SOCKS version: " << _resp->ver << lend;
-                    e.event = SL_EVENT_FAILED; callback(e); return;
-                }
-                if (_resp->rep != sl_socks5rep_successed) {
-                    lerror << sl_socks5msg((sl_socks5rep)_resp->rep) << lend;
+                const sl_socks5_handshake_response* _resp = (const sl_socks5_handshake_response *)_pkg.c_str();
+                // This api is for no-auth proxy
+                if ( _resp->ver != 0x05 && _resp->method != sl_method_noauth ) {
+                    lerror << "unsupported authentication method" << lend;
                     e.event = SL_EVENT_FAILED; callback(e); return;
                 }
 
-                /* Check ATYP */
-                if ( _resp->atyp != sl_socks5atyp_ipv4 ) {
-                    lerror << "ssh-socks5-proxy: Address type not supported: " << _resp->atyp << lend;
+                // Send the connect request
+                // Establish a connection through the proxy server.
+                uint8_t _buffer[256] = {0};
+                // Socks info
+                uint16_t _host_port = htons(port); // the port must be uint16
+
+                /* Assemble the request packet */
+                sl_socks5_connect_request _req;
+                _req.atyp = sl_socks5atyp_dname;
+                memcpy(_buffer, (char *)&_req, sizeof(_req));
+
+                unsigned int _pos = sizeof(_req);
+                _buffer[_pos] = (uint8_t)host.size();
+                _pos += 1;
+                memcpy(_buffer + _pos, host.data(), host.size());
+                _pos += host.size();
+                memcpy(_buffer + _pos, &_host_port, sizeof(_host_port));
+                _pos += sizeof(_host_port);
+                
+                if (write(e.so, _buffer, _pos) == -1) {
                     e.event = SL_EVENT_FAILED; callback(e); return;
                 }
-                e.event = SL_EVENT_CONNECT; callback(e);
+
+                // Wait for the socks5 server's response
+                sl_tcp_socket_monitor(e.so, [callback](sl_event e) {
+                    if ( e.event == SL_EVENT_FAILED ) {
+                        callback(e); return;
+                    }
+                    /*
+                     * The maximum size of the protocol message we are waiting for is 10
+                     * bytes -- VER[1], REP[1], RSV[1], ATYP[1], BND.ADDR[4] and
+                     * BND.PORT[2]; see RFC 1928, section "6. Replies" for more details.
+                     * Everything else is already a part of the data we are supposed to
+                     * deliver to the requester. We know that BND.ADDR is exactly 4 bytes
+                     * since as you can see below, we accept only ATYP == 1 which specifies
+                     * that the IPv4 address is in a binary format.
+                     */
+                    string _pkg;
+                    if (!sl_tcp_socket_read(e.so, _pkg)) {
+                        e.event = SL_EVENT_FAILED; callback(e); return;
+                    }
+                    const sl_socks5_ipv4_response* _resp = (const sl_socks5_ipv4_response *)_pkg.c_str();
+
+                    /* Check the server's version. */
+                    if ( _resp->ver != 0x05 ) {
+                        lerror << "Unsupported SOCKS version: " << _resp->ver << lend;
+                        e.event = SL_EVENT_FAILED; callback(e); return;
+                    }
+                    if (_resp->rep != sl_socks5rep_successed) {
+                        lerror << sl_socks5msg((sl_socks5rep)_resp->rep) << lend;
+                        e.event = SL_EVENT_FAILED; callback(e); return;
+                    }
+
+                    /* Check ATYP */
+                    if ( _resp->atyp != sl_socks5atyp_ipv4 ) {
+                        lerror << "ssh-socks5-proxy: Address type not supported: " << _resp->atyp << lend;
+                        e.event = SL_EVENT_FAILED; callback(e); return;
+                    }
+                    e.event = SL_EVENT_CONNECT; callback(e);
+                });
             });
-        });
-    }));
+        }));
+    } else {
+        ldebug << "the socks5 is empty, try to connect to host(" << host << ") directly" << lend;
+        sl_ip _host_ip(host);
+        if ( (uint32_t)_host_ip == (uint32_t)-1 ) {
+            ldebug << "the host(" << host << ") is not an IP address, try to resolve first" << lend;
+            // This is a domain
+            sl_async_gethostname(host, [tso, &host, port, callback](const vector<sl_ip> &iplist){
+                if ( iplist.size() == 0 || ((uint32_t)iplist[0] == (uint32_t)-1) ) {
+                    // Error
+                    lerror << "failed to resolv " << host << lend;
+                    sl_event _e;
+                    _e.so = tso;
+                    _e.event = SL_EVENT_FAILED;
+                    callback(_e);
+                } else {
+                    ldebug << "resolvd the host " << host << ", trying to connect via tcp socket" << lend;
+                    if ( !sl_tcp_socket_connect(tso, iplist, port, 0, callback) ) {
+                        lerror << "failed to connect to the host(" << host << ")" << lend;
+                        sl_event _e;
+                        _e.so = tso;
+                        _e.event = SL_EVENT_FAILED;
+                        callback(_e);
+                    }
+                }
+            });
+            return true;
+        }
+        return sl_tcp_socket_connect(tso, sl_peerinfo(host, port), callback);
+    }
 }
 bool sl_tcp_socket_send(SOCKET_T tso, const string &pkg)
 {
@@ -327,30 +383,44 @@ bool sl_udp_socket_send(SOCKET_T uso, const string &pkg, const sl_peerinfo& peer
     }
     return true;
 }
-bool sl_udp_socket_monitor(SOCKET_T uso, sl_socket_event_handler callback)
+bool sl_udp_socket_monitor(SOCKET_T uso, const sl_peerinfo& peer, sl_socket_event_handler callback)
 {
     if ( SOCKET_NOT_VALIDATE(uso) ) return false;
     if ( !callback ) return false;
 
-    sl_events::server().update_handler(uso, SL_EVENT_READ, [callback](sl_event e) {
+    sl_events::server().update_handler(uso, SL_EVENT_READ, [peer, callback](sl_event e) {
         if ( e.event != SL_EVENT_READ ) return;
+        ldebug << "udp socket " << e.so << " did get read event callback, which means has incoming data" << lend;
+        if ( peer ) {
+            e.address.sin_family = AF_INET;
+            e.address.sin_port = htons(peer.port_number);
+            e.address.sin_addr.s_addr = (uint32_t)peer.ipaddress;
+        }
         //callback(e.so, e.address);
         callback(e);
     });
 
-    sl_events::server().update_handler(uso, SL_EVENT_FAILED, [callback](sl_event e){
+    sl_events::server().update_handler(uso, SL_EVENT_FAILED, [peer, callback](sl_event e){
         if ( e.event != SL_EVENT_FAILED ) return;
         //callback(INVALIDATE_SOCKET, e.address);
+        if ( peer ) {
+            e.address.sin_family = AF_INET;
+            e.address.sin_port = htons(peer.port_number);
+            e.address.sin_addr.s_addr = (uint32_t)peer.ipaddress;
+        }
         callback(e);
     });
-
+    ldebug << "did update the handler for udp socket " << uso << " on SL_EVENT_READ(2) and SL_EVENT_FAILED(4)" << lend;
     sl_poller::server().monitor_socket(uso, true);
+    ldebug << "did add the udp socket " << uso << " to internal poller to monitor the incoming data" << lend;
     return true;
 }
 bool sl_udp_socket_read(SOCKET_T uso, struct sockaddr_in addr, string& buffer, size_t max_buffer_size)
 {
     if ( SOCKET_NOT_VALIDATE(uso) ) return false;
 
+    sl_peerinfo _pi(addr.sin_addr.s_addr, ntohs(addr.sin_port));
+    ldebug << "udp socket " << uso << " tring to read data from " << _pi << lend;
     buffer.clear();
     buffer.resize(max_buffer_size);
 
@@ -377,6 +447,154 @@ bool sl_udp_socket_read(SOCKET_T uso, struct sockaddr_in addr, string& buffer, s
         }
     } while ( true );
     return true;
+}
+
+#include <netinet/in.h>
+#include <arpa/nameser.h>
+#include <resolv.h>
+
+// Global DNS Server List
+vector<sl_peerinfo> _resolv_list;
+void __sl_async_gethostnmae_udp(const string&& query_pkg, size_t use_index, async_dns_handler fp);
+void __sl_async_gethostnmae_tcp(const string&& query_pkg, size_t use_index, async_dns_handler fp);
+
+void __sl_async_gethostnmae_udp(const string&& query_pkg, size_t use_index, async_dns_handler fp)
+{
+    // No other validate resolve ip in the list, return the 255.255.255.255
+    if ( _resolv_list.size() == use_index ) {
+        lwarning << "no more nameserver validated" << lend;
+        fp( {sl_ip((uint32_t)-1)} );
+        return;
+    }
+
+    // Create a new udp socket and send the query package.
+    SOCKET_T _uso = sl_udp_socket_init();
+    string _domain;
+    dns_get_domain(query_pkg.c_str(), query_pkg.size(), _domain);
+    ldebug << "initialize a udp socket " << _uso << " to query domain: " << _domain << lend;
+    if ( !sl_udp_socket_send(_uso, query_pkg, _resolv_list[use_index]) ) {
+        lerror << "failed to send dns query package to " << _resolv_list[use_index] << lend;
+        // Failed to send( unable to access the server );
+        sl_socket_close(_uso);
+        // Go next server
+        __sl_async_gethostnmae_udp(move(query_pkg), use_index + 1, fp);
+        return;
+    }
+
+    // Monitor for the response data
+    sl_udp_socket_monitor(_uso, _resolv_list[use_index], [&query_pkg, use_index, fp](sl_event e) {
+        // Current server has closed the socket
+        if ( e.event == SL_EVENT_FAILED ) {
+            lerror << "failed to get response from " << _resolv_list[use_index] << " for dns query." << lend;
+            sl_socket_close(e.so);
+            __sl_async_gethostnmae_udp(move(query_pkg), use_index + 1, fp);
+            return;
+        }
+
+        // Read the incoming package
+        string _incoming_pkg;
+        if (!sl_udp_socket_read(e.so, e.address, _incoming_pkg)) {
+            lerror << "failed to read data from udp socket for dns query." << lend;
+            sl_socket_close(e.so);
+            __sl_async_gethostnmae_udp(move(query_pkg), use_index + 1, fp);
+            return;
+        }
+        sl_socket_close(e.so);
+
+        const clnd_dns_package *_pheader = (const clnd_dns_package *)_incoming_pkg.c_str();
+        if ( _pheader->get_resp_code() == dns_rcode_noerr ) {
+            vector<uint32_t> _a_recs;
+            string _qdomain;
+            dns_get_a_records(_incoming_pkg.c_str(), _incoming_pkg.size(), _qdomain, _a_recs);
+            vector<sl_ip> _retval;
+            for ( auto _a : _a_recs ) {
+                _retval.push_back(sl_ip(_a));
+            }
+            fp( _retval );
+        } else if ( _pheader->get_is_truncation() ) {
+            // TRUNC flag get, try to use tcp
+            __sl_async_gethostnmae_tcp(move(query_pkg), use_index, fp);
+        } else {
+            __sl_async_gethostnmae_udp(move(query_pkg), use_index + 1, fp);
+        }
+    });
+}
+void __sl_async_gethostnmae_tcp(const string&& query_pkg, size_t use_index, async_dns_handler fp)
+{
+    SOCKET_T _tso = sl_tcp_socket_init();
+    if ( SOCKET_NOT_VALIDATE(_tso) ) {
+        // No enough file handler
+        __sl_async_gethostnmae_udp(move(query_pkg), use_index + 1, fp);
+        return;
+    }
+
+    sl_tcp_socket_connect(_tso, _resolv_list[use_index], [&query_pkg, use_index, fp](sl_event e) {
+        if ( e.event == SL_EVENT_FAILED ) {
+            // Server not support tcp
+            //sl_socket_close(_tso);
+            sl_socket_close(e.so);
+            __sl_async_gethostnmae_udp(move(query_pkg), use_index + 1, fp);
+            return;
+        }
+        string _tpkg;
+        dns_generate_tcp_redirect_package(move(query_pkg), _tpkg);
+        if ( !sl_tcp_socket_send(e.so, _tpkg) ) {
+            // Failed to send
+            sl_socket_close(e.so);
+            __sl_async_gethostnmae_udp(move(query_pkg), use_index + 1, fp);
+            return;
+        }
+        sl_tcp_socket_monitor(e.so, [&query_pkg, use_index, fp](sl_event e) {
+            if ( e.event == SL_EVENT_FAILED ) {
+                // Peer closed
+                sl_socket_close(e.so);
+                __sl_async_gethostnmae_udp(move(query_pkg), use_index + 1, fp);
+                return;
+            }
+
+            // Read incoming
+            string _tcp_incoming_pkg;
+            if ( !sl_tcp_socket_read(e.so, _tcp_incoming_pkg) ) {
+                sl_socket_close(e.so);
+                __sl_async_gethostnmae_udp(move(query_pkg), use_index + 1, fp);
+                return;
+            }
+            sl_socket_close(e.so);
+
+            string _incoming_pkg;
+            dns_generate_udp_response_package_from_tcp(_tcp_incoming_pkg, _incoming_pkg);
+            const clnd_dns_package *_pheader = (const clnd_dns_package *)_incoming_pkg.c_str();
+            if ( _pheader->get_resp_code() == dns_rcode_noerr ) {
+                vector<uint32_t> _a_recs;
+                string _qdomain;
+                dns_get_a_records(_incoming_pkg.c_str(), _incoming_pkg.size(), _qdomain, _a_recs);
+                vector<sl_ip> _retval;
+                for ( auto _a : _a_recs ) {
+                    _retval.push_back(sl_ip(_a));
+                }
+                fp( _retval );
+            } else {
+                __sl_async_gethostnmae_udp(move(query_pkg), use_index + 1, fp);
+            }
+        });
+    });
+}
+void sl_async_gethostname(const string& host, async_dns_handler fp)
+{
+    if ( _resolv_list.size() == 0 ) {
+        res_init();
+        for ( int i = 0; i < _res.nscount; ++i ) {
+            sl_peerinfo _pi(
+                _res.nsaddr_list[i].sin_addr.s_addr, 
+                ntohs(_res.nsaddr_list[i].sin_port)
+                );
+            _resolv_list.push_back(_pi);
+            ldebug << "resolv get dns: " << _pi << lend;
+        }
+    }
+    string _qpkg;
+    dns_generate_query_package(host, _qpkg);
+    __sl_async_gethostnmae_udp(move(_qpkg), 0, fp);
 }
 
 /*

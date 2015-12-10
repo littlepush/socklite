@@ -29,7 +29,17 @@
 #include "poller.h"
 #include "events.h"
 #include "socks5.h"
+#include "dns.h"
+#include "string_format.hpp"
 
+// Async to get the dns resolve result
+//typedef void (*async_dns_handler)(const vector<sl_ip>& ipaddr);
+typedef std::function<void(const vector<sl_ip> &)>      async_dns_handler;
+
+// Try to get the dns result async
+void sl_async_gethostname(const string& host, async_dns_handler fp);
+
+// Close the socket and release the handler set
 void sl_socket_close(SOCKET_T so);
 
 // TCP Methods
@@ -45,7 +55,7 @@ bool sl_tcp_socket_read(SOCKET_T tso, string& buffer, size_t max_buffer_size = 4
 // UDP Methods
 SOCKET_T sl_udp_socket_init();
 bool sl_udp_socket_send(SOCKET_T uso, const string &pkg, const sl_peerinfo& peer);
-bool sl_udp_socket_monitor(SOCKET_T uso, sl_socket_event_handler callback);
+bool sl_udp_socket_monitor(SOCKET_T uso, const sl_peerinfo& peer, sl_socket_event_handler callback);
 bool sl_udp_socket_read(SOCKET_T uso, struct sockaddr_in addr, string& buffer, size_t max_buffer_size = 512);
 
 #endif 

@@ -66,7 +66,7 @@ TEST_FOBJ = $(TEST_FCPP:.cpp=.o)
 STATIC_LIBS = 
 DYNAMIC_LIBS = libsocklite.so
 EXECUTABLE = 
-TEST_CASE = tinydst
+TEST_CASE = tinydst async
 RELAY_OBJECT = 
 
 all	: PreProcess $(STATIC_LIBS) $(DYNAMIC_LIBS) $(EXECUTABLE) $(TEST_CASE) AfterMake
@@ -113,12 +113,17 @@ withpg : PreProcess $(STATIC_LIBS) $(DYNAMIC_LIBS) $(EXECUTABLE) $(TEST_CASE) Af
 %.o: src/%.cpp
 	$(CC) $(CXXFLAGS) -c -o $@ $<
 
-tinydst.o: test/%.cpp
-	$(CC) $(CXXFLAGS) -c -o tinydst.o
+tinydst.o: test/tinydst.cpp
+	$(CC) $(CXXFLAGS) -c -o tinydst.o test/tinydst.cpp
+
+async.o: test/async.cpp
+	$(CC) $(CXXFLAGS) -c -o async.o test/async.cpp
 
 libsocklite.so : $(OBJ_FILES)
 	$(CC) -shared -o $@ $^ -lresolv
 
-tinydst : $(OBJ_FILES) $(TEST_FOBJ)
+tinydst : $(OBJ_FILES) tinydst.o
 	$(CC) -o $@ $^ $(CXXFLAGS) -std=c++11 -lresolv
 
+async : $(OBJ_FILES) async.o
+	$(CC) -o $@ $^ $(CXXFLAGS) -std=c++11 -lresolv

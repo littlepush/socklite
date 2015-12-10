@@ -68,6 +68,17 @@ namespace cpputility {
         ~thread_agent();
     };
 
+    class signal_agent
+    {
+    public:
+        typedef function<void(void)>        before_exit_t;
+    protected:
+        before_exit_t                       exit_callback_;
+    public:
+        signal_agent(before_exit_t cb);
+        ~signal_agent();
+    };
+
     template < class Item > class event_pool
     {
     public:
@@ -119,6 +130,11 @@ namespace cpputility {
     		lock_guard<mutex> _l(mutex_);
     		pool_.clear();
     	}
+
+        size_t size() {
+            lock_guard<mutex> _l(mutex_);
+            return pool_.size();
+        }
     };
 }
 

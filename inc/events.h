@@ -63,9 +63,15 @@ protected:
     bool                    is_running_;
     thread *                runloop_thread_;
 
+    event_pool<sl_event>    events_pool_;
+    vector<thread*>         thread_pool_;
 
     void _internal_start_runloop();
     void _internal_runloop();
+
+    void _internal_add_worker();
+    void _internal_remove_worker();
+    void _internal_worker();
 public:
     ~sl_events();
     // return the singleton instance of sl_events
