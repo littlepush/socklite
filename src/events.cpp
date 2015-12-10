@@ -130,6 +130,10 @@ void sl_events::_internal_runloop()
             _event_list = move(pending_events_);
         } while(false);
 
+        // Force the fetch method to return immediately if have some pending events
+        if ( _event_list.size() > 0 ) {
+            _tp = 0;
+        }
         size_t _ecount = sl_poller::server().fetch_events(_event_list, _tp) + _event_list.size();
         if ( _ecount != 0 ) {
             for ( auto &e : _event_list ) {
@@ -139,7 +143,6 @@ void sl_events::_internal_runloop()
                 case SL_EVENT_DATA: _hs.on_data(e); break;
                 case SL_EVENT_FAILED: _hs.on_failed(e); break;
                 case SL_EVENT_WRITE: _hs.on_write(e); break;
-                case SL_EVENT_CONNECT: _hs.on_connect(e); break;
                 default: break;
                 };
             }

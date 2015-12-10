@@ -173,6 +173,18 @@ size_t sl_poller::fetch_events( sl_poller::earray &events, unsigned int timedout
 			getsockopt( _e.so, SOL_SOCKET, SO_ERROR, 
 					(char *)&_error, (socklen_t *)&_len);
 			_e.event = (_error != 0) ? SL_EVENT_FAILED : SL_EVENT_DATA;
+			if ( _error == 0 ) {
+				// Check if is read or write
+#if SL_TARGET_LINUX
+				if ( _pe->events & EPOLLOUT ) _e.event = SL_EVENT_WRITE;
+				else _e.event = SL_EVENT_DATA;
+#elif SL_TARGET_MAC
+				if ( _pe->flags & EVFILT_WRITE ) _e.event = SL_EVENT_WRITE;
+				else _e.event = SL_EVENT_DATA;
+#endif
+			} else {
+				_e.event = SL_EVENT_FAILED;
+			}
 			
             int _type;
 			getsockopt( _e.so, SOL_SOCKET, SO_TYPE,
@@ -198,7 +210,7 @@ void sl_poller::monitor_socket( SOCKET_T so, bool oneshot, bool isreset ) {
 
 	struct epoll_event _ee;
 	_ee.data.fd = so;
-	_ee.events = EPOLLIN | EPOLLET;
+	_ee.events = EPOLLIN | EPOLLET | EPOLLOUT;
 	int _op = EPOLL_CTL_ADD;
 	if ( oneshot ) {
 		_ee.events |= EPOLLONESHOT;
@@ -211,7 +223,7 @@ void sl_poller::monitor_socket( SOCKET_T so, bool oneshot, bool isreset ) {
 	if ( oneshot ) {
 		_flags |= EV_ONESHOT;
 	}
-	EV_SET(&_ke, so, EVFILT_READ, _flags, 0, 0, NULL);
+	EV_SET(&_ke, so, EVFILT_READ | EVFILT_WRITE, _flags, 0, 0, NULL);
 	kevent(m_fd, &_ke, 1, NULL, 0, NULL);
 #endif
 }

@@ -117,8 +117,8 @@ tinydst.o: test/%.cpp
 	$(CC) $(CXXFLAGS) -c -o tinydst.o
 
 libsocklite.so : $(OBJ_FILES)
-	$(CC) -shared -o $@ $^
+	$(CC) -shared -o $@ $^ -lresolv
 
 tinydst : $(OBJ_FILES) $(TEST_FOBJ)
-	$(CC) -o $@ $^ $(CXXFLAGS) -std=c++11
+	$(CC) -o $@ $^ $(CXXFLAGS) -std=c++11 -lresolv
 

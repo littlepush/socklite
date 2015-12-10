@@ -69,15 +69,15 @@ namespace cpputility {
         return _m;
     }
     void register_this_thread() {
-        lock_guard<mutex>(__g_infom_mutex());
+        lock_guard<mutex> _(__g_infom_mutex());
         __g_threadinfo()[this_thread::get_id()] = make_pair(make_shared<mutex>(), make_shared<bool>(true));
     }
     void unregister_this_thread() {
-        lock_guard<mutex>(__g_infom_mutex());
+        lock_guard<mutex> _(__g_infom_mutex());
         __g_threadinfo().erase(this_thread::get_id());
     }
     void join_all_threads() {
-        lock_guard<mutex>(__g_infom_mutex());
+        lock_guard<mutex> _(__g_infom_mutex());
         for ( auto &_kv : __g_threadinfo() ) {
             lock_guard<mutex>(*_kv.second.first);
             *_kv.second.second = false;
@@ -85,7 +85,7 @@ namespace cpputility {
     }
     // join specified thread
     void safe_join_thread(thread::id tid) {
-        lock_guard<mutex>(__g_infom_mutex());
+        lock_guard<mutex> _(__g_infom_mutex());
         auto _it = __g_threadinfo().find(this_thread::get_id());
         if ( _it == end(__g_threadinfo()) ) return;
         lock_guard<mutex>(*_it->second.first);
@@ -93,7 +93,7 @@ namespace cpputility {
     }
 
     bool this_thread_is_running() {
-        lock_guard<mutex>(__g_infom_mutex());
+        lock_guard<mutex> _(__g_infom_mutex());
         auto _it = __g_threadinfo().find(this_thread::get_id());
         if ( _it == end(__g_threadinfo()) ) return false;
         lock_guard<mutex>(*_it->second.first);

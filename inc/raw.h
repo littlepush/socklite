@@ -28,20 +28,24 @@
 #include "socket.h"
 #include "poller.h"
 #include "events.h"
+#include "socks5.h"
 
 void sl_socket_close(SOCKET_T so);
 
 // TCP Methods
 SOCKET_T sl_tcp_socket_init();
-bool sl_tcp_socket_connect(SOCKET_T tso, const sl_peerinfo& peer, function<void(SOCKET_T)> callback);
+// Async connect to the peer
+bool sl_tcp_socket_connect(SOCKET_T tso, const sl_peerinfo& peer, sl_socket_event_handler callback);
+// Async connect to the host via a socks5 proxy
+bool sl_tcp_socket_connect(SOCKET_T tso, const sl_peerinfo& socks5, const string& host, uint16_t port, sl_socket_event_handler callback);
 bool sl_tcp_socket_send(SOCKET_T tso, const string &pkg);
-bool sl_tcp_socket_monitor(SOCKET_T tso, function<void(SOCKET_T)> callback);
+bool sl_tcp_socket_monitor(SOCKET_T tso, sl_socket_event_handler callback);
 bool sl_tcp_socket_read(SOCKET_T tso, string& buffer, size_t max_buffer_size = 4098);
 
 // UDP Methods
 SOCKET_T sl_udp_socket_init();
 bool sl_udp_socket_send(SOCKET_T uso, const string &pkg, const sl_peerinfo& peer);
-bool sl_udp_socket_monitor(SOCKET_T uso, function<void(SOCKET_T, struct sockaddr_in)> callback);
+bool sl_udp_socket_monitor(SOCKET_T uso, sl_socket_event_handler callback);
 bool sl_udp_socket_read(SOCKET_T uso, struct sockaddr_in addr, string& buffer, size_t max_buffer_size = 512);
 
 #endif 

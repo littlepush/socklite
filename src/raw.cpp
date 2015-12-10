@@ -69,7 +69,7 @@ SOCKET_T sl_tcp_socket_init()
     sl_events::server().bind(_so, sl_event_empty_handler());
     return _so;
 }
-bool sl_tcp_socket_connect(SOCKET_T tso, const sl_peerinfo& peer, function<void(SOCKET_T)> callback)
+bool sl_tcp_socket_connect(SOCKET_T tso, const sl_peerinfo& peer, sl_socket_event_handler callback)
 {
     if ( SOCKET_NOT_VALIDATE(tso) ) return false;
 
@@ -82,13 +82,15 @@ bool sl_tcp_socket_connect(SOCKET_T tso, const sl_peerinfo& peer, function<void(
     // Update the on connect event callback
     sl_events::server().update_handler(tso, SL_EVENT_CONNECT, [callback](sl_event e){
         if ( e.event != SL_EVENT_CONNECT ) return;
-        callback(e.so);
+        //callback(e.so);
+        callback(e);
     });
 
     // Update the failed handler
     sl_events::server().update_handler(tso, SL_EVENT_FAILED, [callback](sl_event e){
         if ( e.event != SL_EVENT_FAILED ) return;
-        callback(INVALIDATE_SOCKET);
+        //callback(INVALIDATE_SOCKET);
+        callback(e);
     });
 
     if ( ::connect( tso, (struct sockaddr *)&_sock_addr, sizeof(_sock_addr)) == -1 ) {
@@ -106,6 +108,96 @@ bool sl_tcp_socket_connect(SOCKET_T tso, const sl_peerinfo& peer, function<void(
         sl_events::server().add_tcpevent(tso, SL_EVENT_CONNECT);
     }
     return true;
+}
+bool sl_tcp_socket_connect(SOCKET_T tso, const sl_peerinfo& socks5, const string& host, uint16_t port, sl_socket_event_handler callback)
+{
+    return ( !sl_tcp_socket_connect(tso, socks5, [&host, port, callback](sl_event e){
+        if ( e.event == SL_EVENT_FAILED ) {
+            callback(e); return;
+        }
+        sl_socks5_noauth_request _req;
+        // Exchange version info
+        if (write(e.so, (char *)&_req, sizeof(_req)) < 0) {
+            e.event = SL_EVENT_FAILED; callback(e); return;
+        }
+
+        sl_tcp_socket_monitor(e.so, [&host, port, callback](sl_event e) {
+            if ( e.event == SL_EVENT_FAILED ) {
+                callback(e); return;
+            }
+            string _pkg;
+            if ( !sl_tcp_socket_read(e.so, _pkg) ) {
+                e.event = SL_EVENT_FAILED; callback(e); return;
+            }
+            const sl_socks5_handshake_response* _resp = (const sl_socks5_handshake_response *)_pkg.c_str();
+            // This api is for no-auth proxy
+            if ( _resp->ver != 0x05 && _resp->method != sl_method_noauth ) {
+                lerror << "unsupported authentication method" << lend;
+                e.event = SL_EVENT_FAILED; callback(e); return;
+            }
+
+            // Send the connect request
+            // Establish a connection through the proxy server.
+            uint8_t _buffer[256] = {0};
+            // Socks info
+            uint16_t _host_port = htons(port); // the port must be uint16
+
+            /* Assemble the request packet */
+            sl_socks5_connect_request _req;
+            _req.atyp = sl_socks5atyp_dname;
+            memcpy(_buffer, (char *)&_req, sizeof(_req));
+
+            unsigned int _pos = sizeof(_req);
+            _buffer[_pos] = (uint8_t)host.size();
+            _pos += 1;
+            memcpy(_buffer + _pos, host.data(), host.size());
+            _pos += host.size();
+            memcpy(_buffer + _pos, &_host_port, sizeof(_host_port));
+            _pos += sizeof(_host_port);
+            
+            if (write(e.so, _buffer, _pos) == -1) {
+                e.event = SL_EVENT_FAILED; callback(e); return;
+            }
+
+            // Wait for the socks5 server's response
+            sl_tcp_socket_monitor(e.so, [callback](sl_event e) {
+                if ( e.event == SL_EVENT_FAILED ) {
+                    callback(e); return;
+                }
+                /*
+                 * The maximum size of the protocol message we are waiting for is 10
+                 * bytes -- VER[1], REP[1], RSV[1], ATYP[1], BND.ADDR[4] and
+                 * BND.PORT[2]; see RFC 1928, section "6. Replies" for more details.
+                 * Everything else is already a part of the data we are supposed to
+                 * deliver to the requester. We know that BND.ADDR is exactly 4 bytes
+                 * since as you can see below, we accept only ATYP == 1 which specifies
+                 * that the IPv4 address is in a binary format.
+                 */
+                string _pkg;
+                if (!sl_tcp_socket_read(e.so, _pkg)) {
+                    e.event = SL_EVENT_FAILED; callback(e); return;
+                }
+                const sl_socks5_ipv4_response* _resp = (const sl_socks5_ipv4_response *)_pkg.c_str();
+
+                /* Check the server's version. */
+                if ( _resp->ver != 0x05 ) {
+                    lerror << "Unsupported SOCKS version: " << _resp->ver << lend;
+                    e.event = SL_EVENT_FAILED; callback(e); return;
+                }
+                if (_resp->rep != sl_socks5rep_successed) {
+                    lerror << sl_socks5msg((sl_socks5rep)_resp->rep) << lend;
+                    e.event = SL_EVENT_FAILED; callback(e); return;
+                }
+
+                /* Check ATYP */
+                if ( _resp->atyp != sl_socks5atyp_ipv4 ) {
+                    lerror << "ssh-socks5-proxy: Address type not supported: " << _resp->atyp << lend;
+                    e.event = SL_EVENT_FAILED; callback(e); return;
+                }
+                e.event = SL_EVENT_CONNECT; callback(e);
+            });
+        });
+    }));
 }
 bool sl_tcp_socket_send(SOCKET_T tso, const string &pkg)
 {
@@ -131,20 +223,22 @@ bool sl_tcp_socket_send(SOCKET_T tso, const string &pkg)
     }
     return true;
 }
-bool sl_tcp_socket_monitor(SOCKET_T tso, function<void(SOCKET_T)> callback)
+bool sl_tcp_socket_monitor(SOCKET_T tso, sl_socket_event_handler callback)
 {
     if ( SOCKET_NOT_VALIDATE(tso) ) return false;
     if ( !callback ) return false;
     auto _fp = [callback](sl_event e) {
         if ( e.event != SL_EVENT_READ ) return;
-        callback(e.so);
+        //callback(e.so);
+        callback(e);
     };
     sl_events::server().update_handler(tso, SL_EVENT_READ, _fp);
 
     // Update the failed callback
     sl_events::server().update_handler(tso, SL_EVENT_FAILED, [callback](sl_event e){
         if ( e.event != SL_EVENT_FAILED ) return;
-        callback(INVALIDATE_SOCKET);
+        //callback(INVALIDATE_SOCKET);
+        callback(e);
     });
 
     sl_poller::server().monitor_socket(tso, true);
@@ -233,20 +327,21 @@ bool sl_udp_socket_send(SOCKET_T uso, const string &pkg, const sl_peerinfo& peer
     }
     return true;
 }
-bool sl_udp_socket_monitor(SOCKET_T uso, function<void(SOCKET_T, struct sockaddr_in)> callback)
+bool sl_udp_socket_monitor(SOCKET_T uso, sl_socket_event_handler callback)
 {
     if ( SOCKET_NOT_VALIDATE(uso) ) return false;
     if ( !callback ) return false;
-    auto _fp = [callback](sl_event e) {
+
+    sl_events::server().update_handler(uso, SL_EVENT_READ, [callback](sl_event e) {
         if ( e.event != SL_EVENT_READ ) return;
-        callback(e.so, e.address);
-    };
-    //sl_event_update_handler(uso, SL_EVENT_READ, _fp);
-    sl_events::server().update_handler(uso, SL_EVENT_READ, _fp);
+        //callback(e.so, e.address);
+        callback(e);
+    });
 
     sl_events::server().update_handler(uso, SL_EVENT_FAILED, [callback](sl_event e){
         if ( e.event != SL_EVENT_FAILED ) return;
-        callback(INVALIDATE_SOCKET, e.address);
+        //callback(INVALIDATE_SOCKET, e.address);
+        callback(e);
     });
 
     sl_poller::server().monitor_socket(uso, true);

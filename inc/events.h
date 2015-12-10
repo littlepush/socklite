@@ -41,7 +41,6 @@ typedef struct tag_sl_handler_set {
     sl_socket_event_handler         on_data;
     sl_socket_event_handler         on_failed;
     sl_socket_event_handler         on_write;
-    sl_socket_event_handler         on_connect;
 } sl_handler_set;
 
 // Create and return an empty handler set

@@ -524,22 +524,22 @@ void __sl_async_gethostnmae_udp(const string&& query_pkg, size_t use_index, asyn
     }
 
     // Monitor for the response data
-    sl_udp_socket_monitor(_uso, [&query_pkg, use_index, fp, _uso](SOCKET_T so, struct sockaddr_in addr) {
+    sl_udp_socket_monitor(_uso, [&query_pkg, use_index, fp](sl_event e) {
         // Current server has closed the socket
-        if (SOCKET_NOT_VALIDATE(so)) {
-            sl_socket_close(_uso);
+        if ( e.event == SL_EVENT_FAILED ) {
+            sl_socket_close(e.so);
             __sl_async_gethostnmae_udp(move(query_pkg), use_index + 1, fp);
             return;
         }
 
         // Read the incoming package
         string _incoming_pkg;
-        if (!sl_udp_socket_read(so, addr, _incoming_pkg)) {
-            sl_socket_close(so);
+        if (!sl_udp_socket_read(e.so, e.address, _incoming_pkg)) {
+            sl_socket_close(e.so);
             __sl_async_gethostnmae_udp(move(query_pkg), use_index + 1, fp);
             return;
         }
-        sl_socket_close(so);
+        sl_socket_close(e.so);
 
         const clnd_dns_package *_pheader = (const clnd_dns_package *)_incoming_pkg.c_str();
         if ( _pheader->get_resp_code() == dns_rcode_noerr ) {
@@ -568,37 +568,38 @@ void __sl_async_gethostnmae_tcp(const string&& query_pkg, size_t use_index, asyn
         return;
     }
 
-    sl_tcp_socket_connect(_tso, _resolv_list[use_index], [&query_pkg, use_index, fp, _tso](SOCKET_T so) {
-        if ( SOCKET_NOT_VALIDATE(so) ) {
+    sl_tcp_socket_connect(_tso, _resolv_list[use_index], [&query_pkg, use_index, fp](sl_event e) {
+        if ( e.event == SL_EVENT_FAILED ) {
             // Server not support tcp
-            sl_socket_close(_tso);
+            //sl_socket_close(_tso);
+            sl_socket_close(e.so);
             __sl_async_gethostnmae_udp(move(query_pkg), use_index + 1, fp);
             return;
         }
         string _tpkg;
         dns_generate_tcp_redirect_package(move(query_pkg), _tpkg);
-        if ( !sl_tcp_socket_send(so, _tpkg) ) {
+        if ( !sl_tcp_socket_send(e.so, _tpkg) ) {
             // Failed to send
-            sl_socket_close(so);
+            sl_socket_close(e.so);
             __sl_async_gethostnmae_udp(move(query_pkg), use_index + 1, fp);
             return;
         }
-        sl_tcp_socket_monitor(so, [&query_pkg, use_index, fp, so](SOCKET_T mso) {
-            if ( SOCKET_NOT_VALIDATE(mso) ) {
+        sl_tcp_socket_monitor(e.so, [&query_pkg, use_index, fp](sl_event e) {
+            if ( e.event == SL_EVENT_FAILED ) {
                 // Peer closed
-                sl_socket_close(so);
+                sl_socket_close(e.so);
                 __sl_async_gethostnmae_udp(move(query_pkg), use_index + 1, fp);
                 return;
             }
 
             // Read incoming
             string _tcp_incoming_pkg;
-            if ( !sl_tcp_socket_read(mso, _tcp_incoming_pkg) ) {
-                sl_socket_close(mso);
+            if ( !sl_tcp_socket_read(e.so, _tcp_incoming_pkg) ) {
+                sl_socket_close(e.so);
                 __sl_async_gethostnmae_udp(move(query_pkg), use_index + 1, fp);
                 return;
             }
-            sl_socket_close(mso);
+            sl_socket_close(e.so);
 
             string _incoming_pkg;
             dns_generate_udp_response_package_from_tcp(_tcp_incoming_pkg, _incoming_pkg);

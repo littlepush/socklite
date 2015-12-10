@@ -44,11 +44,11 @@
 // All Socket Event
 enum SL_EVENT_ID {
     SL_EVENT_ACCEPT         = 0x01,
-    SL_EVENT_DATA           = 0x02,    // READ
+    SL_EVENT_DATA           = 0x02,     // READ
     SL_EVENT_READ           = 0x02,
     SL_EVENT_FAILED         = 0x04,
     SL_EVENT_CONNECT        = 0x08,
-    SL_EVENT_WRITE          = 0x10,
+    SL_EVENT_WRITE          = 0x08,     // Write and connect is the same
 
     SL_EVENT_DEFAULT        = (SL_EVENT_ACCEPT | SL_EVENT_DATA | SL_EVENT_FAILED),
     SL_EVENT_ALL            = 0x1F
