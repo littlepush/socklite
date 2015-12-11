@@ -383,14 +383,14 @@ bool sl_tcp_socket_listen(SOCKET_T tso, const sl_peerinfo& bind_port, sl_socket_
     });
 
     if ( ::bind(tso, (struct sockaddr *)&_sock_addr, sizeof(_sock_addr)) == -1 ) {
-        lerror << "failed to listen on " << bind_port << ": " << ::strerror( errno ) << lend;
+        lerror << "failed to listen tcp on " << bind_port << ": " << ::strerror( errno ) << lend;
         return false;
     }
     if ( -1 == ::listen(tso, 1024) ) {
-        lerror << "failed to listen on " << bind_port << ": " << ::strerror( errno ) << lend;
+        lerror << "failed to listen tcp on " << bind_port << ": " << ::strerror( errno ) << lend;
         return false;
     }
-    linfo << "start to listening on " << bind_port << lend;
+    linfo << "start to listening tcp on " << bind_port << lend;
     sl_poller::server().bind_tcp_server(tso);
     return true;
 }
@@ -514,6 +514,33 @@ bool sl_udp_socket_read(SOCKET_T uso, struct sockaddr_in addr, string& buffer, s
             return true;
         }
     } while ( true );
+    return true;
+}
+
+bool sl_udp_socket_listen(SOCKET_T uso, const sl_peerinfo& bind_port, sl_socket_event_handler accept_callback)
+{
+    if ( SOCKET_NOT_VALIDATE(uso) ) return false;
+    struct sockaddr_in _sock_addr;
+    memset((char *)&_sock_addr, 0, sizeof(_sock_addr));
+    _sock_addr.sin_family = AF_INET;
+    _sock_addr.sin_port = htons(bind_port.port_number);
+    _sock_addr.sin_addr.s_addr = bind_port.ipaddress;
+
+    sl_events::server().update_handler(uso, SL_EVENT_ACCEPT, [accept_callback](sl_event e) {
+        if ( e.event != SL_EVENT_DATA ) {
+            lerror << "the incoming socket event is not an accept event." << lend;
+            return;
+        }
+        accept_callback(e);
+        sl_poller::server().bind_udp_server(e.so);
+    });
+
+    if ( ::bind(uso, (struct sockaddr *)&_sock_addr, sizeof(_sock_addr)) == -1 ) {
+        lerror << "failed to listen on udp " << bind_port << ": " << ::strerror( errno ) << lend;
+        return false;
+    }
+    linfo << "start to listening udp on " << bind_port << lend;
+    sl_poller::server().bind_udp_server(uso);
     return true;
 }
 

@@ -206,14 +206,20 @@ void sl_events::_internal_worker()
         SOCKET_T _s = ((_local_event.event == SL_EVENT_ACCEPT) && 
                         (_local_event.socktype == IPPROTO_TCP)) ? 
                         _local_event.source : _local_event.so;
+        SL_EVENT_ID _e = ((_local_event.event == SL_EVENT_DATA) && 
+                            (_local_event.so == _local_event.source) && 
+                            (_local_event.socktype == IPPROTO_UDP)) ?
+                            SL_EVENT_ACCEPT : _local_event.event;
+        ldebug << "processing socket " << _s << " for event " << _e << lend;
         sl_handler_set _hs = sl_event_find_handler(_s);
         // Remove current event handler
-        sl_event_bind_handler(_local_event.so, move(sl_event_empty_handler()));
-        sl_socket_event_handler _seh = (&_hs.on_accept)[SL_MACRO_LAST_1_INDEX(_local_event.event)];
+        if ( _e != SL_EVENT_ACCEPT ) {
+            sl_event_bind_handler(_local_event.so, move(sl_event_empty_handler()));
+        }
+        sl_socket_event_handler _seh = (&_hs.on_accept)[SL_MACRO_LAST_1_INDEX(_e)];
         if ( !_seh ) {
             lwarning << "No handler bind for event: " << 
-                _local_event.event << " on socket " << 
-                _local_event.so << lend;
+                _e << " on socket " << _s << lend;
         } else {
             _seh(_local_event);
         }

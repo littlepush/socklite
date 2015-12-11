@@ -73,11 +73,11 @@ void sl_poller::bind_udp_server( SOCKET_T so ) {
 #if SL_TARGET_LINUX
 	struct epoll_event _e;
 	_e.data.fd = so;
-	_e.events = EPOLLIN | EPOLLET;
+	_e.events = EPOLLIN | EPOLLET | EPOLLONESHOT;
 	epoll_ctl( m_fd, EPOLL_CTL_ADD, so, &_e );
 #elif SL_TARGET_MAC
 	struct kevent _e;
-	EV_SET(&_e, so, EVFILT_READ, EV_ADD, 0, 0, NULL);
+	EV_SET(&_e, so, EVFILT_READ, EV_ADD | EV_ONESHOT, 0, 0, NULL);
 	kevent(m_fd, &_e, 1, NULL, 0, NULL);
 #endif
 }
@@ -99,6 +99,7 @@ size_t sl_poller::fetch_events( sl_poller::earray &events, unsigned int timedout
 		struct kevent *_pe = m_events + i;
 #endif
 		sl_event _e;
+		_e.source = INVALIDATE_SOCKET;
 		_e.socktype = IPPROTO_TCP;
 		// Disconnected
 #if SL_TARGET_LINUX

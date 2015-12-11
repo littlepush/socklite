@@ -58,6 +58,7 @@ SOCKET_T sl_udp_socket_init();
 bool sl_udp_socket_send(SOCKET_T uso, const string &pkg, const sl_peerinfo& peer);
 bool sl_udp_socket_monitor(SOCKET_T uso, const sl_peerinfo& peer, sl_socket_event_handler callback);
 bool sl_udp_socket_read(SOCKET_T uso, struct sockaddr_in addr, string& buffer, size_t max_buffer_size = 512);
+bool sl_udp_socket_listen(SOCKET_T uso, const sl_peerinfo& bind_port, sl_socket_event_handler accept_callback);
 
 #endif 
 // sock.raw.h

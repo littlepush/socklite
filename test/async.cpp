@@ -95,9 +95,21 @@ int main( int argc, char * argv[] )
             sl_tcp_socket_read(e.so, _buf, 1024);
             dump_hex(_buf);
             sl_tcp_socket_send(e.so, _buf);
-            sl_tcp_socket_monitor(e.so, [&](sl_event e) {
-                sl_socket_close(e.so);
-            });
+            sl_socket_close(e.so);
+        });
+    }
+
+    SOCKET_T _dso = sl_udp_socket_init();
+    if ( SOCKET_NOT_VALIDATE(_dso) ) {
+        lerror << "failed to init a socket for udp listening" << lend;
+    } else {
+        sl_udp_socket_listen(_dso, sl_peerinfo(INADDR_ANY, 2000), [&](sl_event e) {
+            string _dnspkg;
+            sl_udp_socket_read(e.so, e.address, _dnspkg);
+            string _domain;
+            dns_get_domain(_dnspkg.c_str(), _dnspkg.size(), _domain);
+            sl_peerinfo _pi(e.address.sin_addr.s_addr, ntohs(e.address.sin_port));
+            linfo << "get request from " << _pi << " to query domain " << _domain << lend;
         });
     }
     return 0;
