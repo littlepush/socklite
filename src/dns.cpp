@@ -65,6 +65,7 @@
 
 #include "dns.h"
 #include "string_format.hpp"
+#include <arpa/inet.h>
 
 #ifdef SOCK_LITE_INTEGRATION_DNS
 
