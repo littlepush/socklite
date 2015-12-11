@@ -345,6 +345,10 @@ SOCKET_T sl_udp_socket_init()
     _usin.sin_port = 0;
     bind(_so, (struct sockaddr *)&_usin, sizeof(_usin));
 
+    // Try to set the udp socket as nonblocking
+    unsigned long _u = 1;
+    SL_NETWORK_IOCTL_CALL(_so, FIONBIO, &_u);
+
     // Bind the empty handler set
     //sl_event_bind_handler(_so, sl_event_empty_handler());
     sl_events::server().bind(_so, sl_event_empty_handler());
@@ -411,7 +415,7 @@ bool sl_udp_socket_monitor(SOCKET_T uso, const sl_peerinfo& peer, sl_socket_even
         callback(e);
     });
     ldebug << "did update the handler for udp socket " << uso << " on SL_EVENT_READ(2) and SL_EVENT_FAILED(4)" << lend;
-    sl_poller::server().monitor_socket(uso, true, SL_EVENT_DEFAULT, true);
+    sl_poller::server().monitor_socket(uso, true, SL_EVENT_DEFAULT);
     ldebug << "did add the udp socket " << uso << " to internal poller to monitor the incoming data" << lend;
     return true;
 }

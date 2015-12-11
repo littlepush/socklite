@@ -123,7 +123,7 @@ libsocklite.so : $(OBJ_FILES)
 	$(CC) -shared -o $@ $^ -lresolv
 
 tinydst : $(OBJ_FILES) test/tinydst.o
-	$(CC) -o $@ $^ $(CXXFLAGS) -std=c++11 -lresolv
+	$(CC) -o $@ $^ $(CXXFLAGS) -std=c++11 -lresolv -pthread
 
 async : $(OBJ_FILES) test/async.o
-	$(CC) -o $@ $^ $(CXXFLAGS) -std=c++11 -lresolv
+	$(CC) -o $@ $^ $(CXXFLAGS) -std=c++11 -lresolv -pthread
