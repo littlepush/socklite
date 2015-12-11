@@ -65,6 +65,7 @@ protected:
 
     event_pool<sl_event>    events_pool_;
     vector<thread*>         thread_pool_;
+    thread *                thread_pool_manager_;
 
     void _internal_start_runloop();
     void _internal_runloop();

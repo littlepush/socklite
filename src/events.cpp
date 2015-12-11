@@ -110,6 +110,20 @@ void sl_events::_internal_start_runloop()
     runloop_thread_ = new thread([this]{
         _internal_runloop();
     });
+    this->_internal_add_worker();
+    thread_pool_manager_ = new thread([this]{
+        thread_agent _ta;
+
+        while ( true ) {
+            usleep(10000);
+            if ( !this_thread_is_running() ) break;
+            if ( events_pool_.size() > (thread_pool_.size() * 10) ) {
+                this->_internal_add_worker();
+            } else if ( events_pool_.size() < (thread_pool_.size() * 2) && thread_pool_.size() > 1 ) {
+                this->_internal_remove_worker();
+            }
+        }
+    });  
 }
 
 void sl_events::_internal_runloop()
@@ -153,17 +167,6 @@ void sl_events::_internal_runloop()
         if ( _fp != NULL ) {
             _fp();
         }
-
-        do {
-            if ( this->pending_socket_count() > (thread_pool_.size() * 2) && thread_pool_.size() < 512 ) {
-                lock_guard<mutex> _(running_lock_);
-                this->_internal_add_worker();
-            }
-            if ( this->pending_socket_count() < thread_pool_.size() && thread_pool_.size() > 1 ) {
-                lock_guard<mutex> _(running_lock_);
-                this->_internal_remove_worker();
-            }
-        } while (false);
     }
 
     linfo << "internal runloop will terminated" << lend;
@@ -187,6 +190,7 @@ void sl_events::_internal_remove_worker()
     thread *_last_worker = *thread_pool_.rbegin();
     thread_pool_.pop_back();
     safe_join_thread(_last_worker->get_id());
+    _last_worker->join();
     delete _last_worker;
 }
 void sl_events::_internal_worker()
@@ -258,9 +262,6 @@ void sl_events::run(uint32_t timepiece, sl_runloop_callback cb)
     rl_callback_ = cb;
 
     this->_internal_start_runloop();
-    if ( thread_pool_.size() == 0 ) {
-        this->_internal_add_worker();
-    }
 }
 
 void sl_events::stop_run()
@@ -268,8 +269,17 @@ void sl_events::stop_run()
     lock_guard<mutex> _(running_lock_);
     if ( is_running_ == false ) return;
     safe_join_thread(runloop_thread_->get_id());
+    runloop_thread_->join();
     delete runloop_thread_;
     runloop_thread_ = NULL;
+
+    // Close the thread pool manager
+    safe_join_thread(thread_pool_manager_->get_id());
+    thread_pool_manager_->join();
+    delete thread_pool_manager_;
+    thread_pool_manager_ = NULL;
+
+    // Close all worker in thread pool
     while ( thread_pool_.size() > 0 ) {
         this->_internal_remove_worker();
     }

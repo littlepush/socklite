@@ -31,3 +31,4 @@ result/
 *.swp
 dist/
 tinydst
+async

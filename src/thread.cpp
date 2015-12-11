@@ -112,7 +112,7 @@ namespace cpputility {
     signal_agent::~signal_agent() {
         wait_for_exit_signal();
         join_all_threads();
-        exit_callback_();
+        if ( exit_callback_ ) exit_callback_() ;
         usleep(100000); // sleep 100ms before exit
     }
 }
