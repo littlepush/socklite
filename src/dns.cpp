@@ -396,6 +396,21 @@ void dns_generate_a_records_resp( const char *pkg, unsigned int len, vector<uint
     }
 }
 
+// Generate response package for specified query domain
+void dns_generate_a_records_resp( 
+    const string &query_domain, 
+    uint16_t trans_id, 
+    const vector<uint32_t> & iplist, 
+    string &buf )
+{
+    string _query_pkg;
+    dns_generate_query_package(query_domain, _query_pkg);
+    clnd_dns_package *_pkg = (clnd_dns_package *)&_query_pkg[0];
+    uint16_t* _ptid = (uint16_t *)_pkg;
+    *_ptid = htons(trans_id);
+    dns_generate_a_records_resp(_query_pkg.c_str(), _query_pkg.size(), iplist, buf);
+}
+
 void dns_gnerate_cname_records_resp( const char *pkg, unsigned int len, vector<string> cnamelist, string &buf )
 {
     // Resp Header

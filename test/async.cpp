@@ -108,8 +108,63 @@ int main( int argc, char * argv[] )
             sl_udp_socket_read(e.so, e.address, _dnspkg);
             string _domain;
             dns_get_domain(_dnspkg.c_str(), _dnspkg.size(), _domain);
+            const clnd_dns_package *_pkg = (const clnd_dns_package *)_dnspkg.c_str();
+            uint16_t _tid = _pkg->get_transaction_id();
             sl_peerinfo _pi(e.address.sin_addr.s_addr, ntohs(e.address.sin_port));
             linfo << "get request from " << _pi << " to query domain " << _domain << lend;
+            sl_async_gethostname(_domain, [_domain, _tid, e, _pi](const vector<sl_ip> & iplist){
+                string _resp;
+                vector<uint32_t> _iplist;
+                for ( auto ip : iplist ) {
+                    _iplist.push_back((uint32_t)ip);
+                }
+                dns_generate_a_records_resp(_domain, _tid, _iplist, _resp);
+                sl_udp_socket_send(e.so, _resp, _pi);
+            });
+        });
+    }
+
+    SOCKET_T _dsso = sl_udp_socket_init();
+    if ( SOCKET_NOT_VALIDATE(_dsso) ) {
+        lerror << "failed to init a socket for proxy udp dns listening" << lend;
+    } else {
+        sl_udp_socket_listen(_dsso, sl_peerinfo(INADDR_ANY, 2001), [&](sl_event e) {
+            string _dnspkg;
+            sl_udp_socket_read(e.so, e.address, _dnspkg);
+            string _domain;
+            dns_get_domain(_dnspkg.c_str(), _dnspkg.size(), _domain);
+            // const clnd_dns_package *_pkg = (const clnd_dns_package *)_dnspkg.c_str();
+            // uint16_t _tid = _pkg->get_transaction_id();
+            sl_peerinfo _pi(e.address.sin_addr.s_addr, ntohs(e.address.sin_port));
+            linfo << "get request from " << _pi << " to query domain " << _domain << lend;
+            SOCKET_T _tso = sl_tcp_socket_init();
+            sl_tcp_socket_connect(
+                _tso, sl_peerinfo("127.0.0.1:1080"), "8.8.8.8", 53, 
+                [e, _dnspkg, _pi](sl_event te) {
+                if ( te.event == SL_EVENT_FAILED ) {
+                    lerror << "failed to connect to 8.8.8.8:53 via socks5 127.0.0.1:1080" << lend;
+                    sl_socket_close(te.so);
+                    return;
+                }
+                string _tcp_dns;
+                dns_generate_tcp_redirect_package(_dnspkg, _tcp_dns);
+                sl_tcp_socket_send(te.so, _tcp_dns);
+                sl_tcp_socket_monitor(te.so, [e, _pi](sl_event te) {
+                    if ( te.event == SL_EVENT_FAILED ) {
+                        lerror << "the connection has been dropped for tcp socket: " << te.so << lend;
+                        sl_socket_close(te.so);
+                        return;
+                    }
+                    string _resp;
+                    sl_tcp_socket_read(te.so, _resp);
+                    // Release the tcp socket
+                    sl_socket_close(te.so);
+
+                    string _udp_resp;
+                    dns_generate_udp_response_package_from_tcp(_resp, _udp_resp);
+                    sl_udp_socket_send(e.so, _udp_resp, _pi);
+                });
+            });
         });
     }
     return 0;

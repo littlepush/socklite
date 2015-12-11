@@ -201,6 +201,13 @@ int dns_generate_udp_response_package_from_tcp( const string &incoming_pkg, stri
 // Generate the A records response from the received package
 void dns_generate_a_records_resp( const char *pkg, unsigned int len, vector<uint32_t> ipaddress, string &buf );
 
+// Generate response package for specified query domain
+void dns_generate_a_records_resp( 
+    const string &query_domain, 
+    uint16_t trans_id, 
+    const vector<uint32_t> & iplist, 
+    string &buf );
+
 // Generate the C Name records response from the received package
 void dns_gnerate_cname_records_resp( const char *pkg, unsigned int len, vector<string> cnamelist, string &buf );
 
