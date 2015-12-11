@@ -137,7 +137,7 @@ bool sl_tcp_socket_connect(SOCKET_T tso, const sl_peerinfo& socks5, const string
 {
     if ( socks5 ) {
         ldebug << "try to connect via a socks5 proxy: " << socks5 << lend;
-        return ( !sl_tcp_socket_connect(tso, socks5, [socks5, &host, port, callback](sl_event e){
+        return ( !sl_tcp_socket_connect(tso, socks5, [socks5, host, port, callback](sl_event e){
             if ( e.event == SL_EVENT_FAILED ) {
                 lerror << "the socks5 proxy cannot be connected" << socks5 << lend;
                 callback(e); return;
@@ -148,7 +148,7 @@ bool sl_tcp_socket_connect(SOCKET_T tso, const sl_peerinfo& socks5, const string
                 e.event = SL_EVENT_FAILED; callback(e); return;
             }
 
-            sl_tcp_socket_monitor(e.so, [&host, port, callback](sl_event e) {
+            sl_tcp_socket_monitor(e.so, [host, port, callback](sl_event e) {
                 if ( e.event == SL_EVENT_FAILED ) {
                     callback(e); return;
                 }
@@ -231,7 +231,7 @@ bool sl_tcp_socket_connect(SOCKET_T tso, const sl_peerinfo& socks5, const string
         if ( (uint32_t)_host_ip == (uint32_t)-1 ) {
             ldebug << "the host(" << host << ") is not an IP address, try to resolve first" << lend;
             // This is a domain
-            sl_async_gethostname(host, [tso, &host, port, callback](const vector<sl_ip> &iplist){
+            sl_async_gethostname(host, [tso, host, port, callback](const vector<sl_ip> &iplist){
                 if ( iplist.size() == 0 || ((uint32_t)iplist[0] == (uint32_t)-1) ) {
                     // Error
                     lerror << "failed to resolv " << host << lend;

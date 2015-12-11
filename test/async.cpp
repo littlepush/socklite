@@ -45,7 +45,7 @@ int main( int argc, char * argv[] )
         lerror << "failed to init a tcp socket" << lend;
     } else {
         ldebug << "before connect to " << _test_domain << lend;
-        sl_tcp_socket_connect(_tso, sl_peerinfo::nan(), _test_domain, 80, [&_test_domain](sl_event e) {
+        sl_tcp_socket_connect(_tso, sl_peerinfo::nan(), _test_domain, 80, [_test_domain](sl_event e) {
             if ( e.event == SL_EVENT_FAILED ) {
                 lerror << "failed to connect to " << _test_domain << lend;
                 sl_socket_close(e.so);
