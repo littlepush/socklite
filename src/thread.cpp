@@ -23,7 +23,8 @@
 #include "thread.h"
 #include <map>
 #include <iostream>
-
+#include <unistd.h>
+    
 #ifdef SOCK_LITE_INTEGRATION_THREAD
 
 namespace cpputility {
