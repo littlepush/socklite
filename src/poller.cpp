@@ -179,7 +179,7 @@ size_t sl_poller::fetch_events( sl_poller::earray &events, unsigned int timedout
 				if ( _pe->events & EPOLLIN ) _e.event = SL_EVENT_DATA;
 				else _e.event = SL_EVENT_WRITE;
 #elif SL_TARGET_MAC
-				if ( _pe->filter & EVFILT_READ ) _e.event = SL_EVENT_DATA;
+				if ( _pe->filter == EVFILT_READ ) _e.event = SL_EVENT_DATA;
 				else _e.event = SL_EVENT_WRITE;
 #endif
 			} else {
@@ -202,7 +202,7 @@ size_t sl_poller::fetch_events( sl_poller::earray &events, unsigned int timedout
 	return events.size();
 }
 
-void sl_poller::monitor_socket( SOCKET_T so, bool oneshot, bool isreset ) {
+void sl_poller::monitor_socket( SOCKET_T so, bool oneshot, SL_EVENT_ID eid, bool isreset ) {
 	if ( m_fd == -1 ) return;
 #if SL_TARGET_LINUX
 
@@ -212,7 +212,9 @@ void sl_poller::monitor_socket( SOCKET_T so, bool oneshot, bool isreset ) {
 
 	struct epoll_event _ee;
 	_ee.data.fd = so;
-	_ee.events = EPOLLIN | EPOLLET | EPOLLOUT;
+	_ee.events = EPOLLET;
+	if ( eid & SL_EVENT_DATA ) _ee.events |= EPOLLIN;
+	if ( eid & SL_EVENT_WRITE ) _ee.events |= EPOLLOUT;
 	int _op = EPOLL_CTL_ADD;
 	if ( oneshot ) {
 		_ee.events |= EPOLLONESHOT;
@@ -225,13 +227,17 @@ void sl_poller::monitor_socket( SOCKET_T so, bool oneshot, bool isreset ) {
 	if ( oneshot ) {
 		_flags |= EV_ONESHOT;
 	}
-	EV_SET(&_ke, so, EVFILT_READ, _flags, 0, 0, NULL);
-	if ( -1 == kevent(m_fd, &_ke, 1, NULL, 0, NULL) ) {
-		lerror << "failed to monitor the socket " << so << lend;
+	if ( eid & SL_EVENT_DATA ) {
+		EV_SET(&_ke, so, EVFILT_READ, _flags, 0, 0, NULL);
+		if ( -1 == kevent(m_fd, &_ke, 1, NULL, 0, NULL) ) {
+			lerror << "failed to monitor the socket " << so << lend;
+		}
 	}
-	EV_SET(&_ke, so, EVFILT_WRITE, _flags, 0, 0, NULL);
-	if ( -1 == kevent(m_fd, &_ke, 1, NULL, 0, NULL) ) {
-		lerror << "failed to monitor the socket " << so << lend;
+	if ( eid & SL_EVENT_WRITE ) {
+		EV_SET(&_ke, so, EVFILT_WRITE, _flags, 0, 0, NULL);
+		if ( -1 == kevent(m_fd, &_ke, 1, NULL, 0, NULL) ) {
+			lerror << "failed to monitor the socket " << so << lend;
+		}
 	}
 #endif
 }

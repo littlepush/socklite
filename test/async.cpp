@@ -22,6 +22,12 @@
 
 #include "raw.h"
 
+void dump_iplist(const vector<sl_ip> & iplist) {
+    for ( auto ip : iplist ) {
+        linfo << "get A record: " << ip << lend;
+    }
+}
+
 int main( int argc, char * argv[] )
 {
     cp_logger::start(stderr, log_debug);
@@ -29,11 +35,10 @@ int main( int argc, char * argv[] )
         linfo << "the async server receive exit signal, ready to kill all working threads." << lend;
     });
 
-    sl_async_gethostname("www.tmall.com", [&](const vector<sl_ip> & iplist) {
-        for ( auto ip : iplist ) {
-            linfo << "get A record: " << ip << lend;
-        }
-    });
+    sl_async_gethostname("www.tmall.com", dump_iplist);
+    sl_async_gethostname("www.baidu.com", dump_iplist);
+    sl_async_gethostname("www.dianping.com", dump_iplist);
+    
     string _test_domain = "www.baidu.com";
     SOCKET_T _tso = sl_tcp_socket_init();
     if ( SOCKET_NOT_VALIDATE(_tso) ) {

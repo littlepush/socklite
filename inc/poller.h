@@ -95,7 +95,7 @@ public:
 	// Start to monitor a socket hander
 	// In default, the poller will maintain the socket infinite, if
 	// `oneshot` is true, then will add the ONESHOT flag
-	void monitor_socket( SOCKET_T so, bool oneshot = false, bool isreset = false );
+	void monitor_socket( SOCKET_T so, bool oneshot = false, SL_EVENT_ID eid = SL_EVENT_DEFAULT, bool isreset = false );
 
 	// Singleton Poller Item
 	static sl_poller &server();

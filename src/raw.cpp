@@ -102,7 +102,7 @@ bool sl_tcp_socket_connect(SOCKET_T tso, const sl_peerinfo& peer, sl_socket_even
         } else {
             // Monitor the socket, the poller will invoke on_connect when the socket is connected or failed.
             ldebug << "monitor tcp socket " << tso << " for connecting" << lend;
-            sl_poller::server().monitor_socket(tso, true);
+            sl_poller::server().monitor_socket(tso, true, SL_EVENT_CONNECT);
         }
     } else {
         // Add to next run loop to process the connect event.
@@ -297,7 +297,7 @@ bool sl_tcp_socket_monitor(SOCKET_T tso, sl_socket_event_handler callback)
         callback(e);
     });
 
-    sl_poller::server().monitor_socket(tso, true);
+    sl_poller::server().monitor_socket(tso, true, SL_EVENT_DEFAULT, true);
     return true;
 }
 bool sl_tcp_socket_read(SOCKET_T tso, string& buffer, size_t max_buffer_size)
@@ -411,7 +411,7 @@ bool sl_udp_socket_monitor(SOCKET_T uso, const sl_peerinfo& peer, sl_socket_even
         callback(e);
     });
     ldebug << "did update the handler for udp socket " << uso << " on SL_EVENT_READ(2) and SL_EVENT_FAILED(4)" << lend;
-    sl_poller::server().monitor_socket(uso, true);
+    sl_poller::server().monitor_socket(uso, true, SL_EVENT_DEFAULT, true);
     ldebug << "did add the udp socket " << uso << " to internal poller to monitor the incoming data" << lend;
     return true;
 }

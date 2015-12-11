@@ -204,6 +204,8 @@ void sl_events::_internal_worker()
             _local_event = e;
         }) ) continue;
         sl_handler_set _hs = sl_event_find_handler(_local_event.so);
+        // Remove current event handler
+        sl_event_bind_handler(_local_event.so, move(sl_event_empty_handler()));
         sl_socket_event_handler _seh = (&_hs.on_accept)[SL_MACRO_LAST_1_INDEX(_local_event.event)];
         if ( !_seh ) {
             lwarning << "No handler bind for event: " << _local_event.event << " on socket " << _local_event.so << lend;
