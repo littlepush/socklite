@@ -38,14 +38,14 @@ int main( int argc, char * argv[] )
     sl_async_gethostname("www.tmall.com", dump_iplist);
     sl_async_gethostname("www.baidu.com", dump_iplist);
     sl_async_gethostname("www.dianping.com", dump_iplist);
-    
+
     string _test_domain = "www.baidu.com";
     SOCKET_T _tso = sl_tcp_socket_init();
     if ( SOCKET_NOT_VALIDATE(_tso) ) {
         lerror << "failed to init a tcp socket" << lend;
     } else {
         ldebug << "before connect to " << _test_domain << lend;
-        sl_tcp_socket_connect(_tso, sl_peerinfo::nan(), _test_domain, 80, [&](sl_event e) {
+        sl_tcp_socket_connect(_tso, sl_peerinfo::nan(), _test_domain, 80, [&_test_domain](sl_event e) {
             if ( e.event == SL_EVENT_FAILED ) {
                 lerror << "failed to connect to " << _test_domain << lend;
                 sl_socket_close(e.so);
@@ -54,15 +54,15 @@ int main( int argc, char * argv[] )
             ldebug << "connected to " << _test_domain << lend;
             linfo << "we now connect to " << _test_domain << lnewl << "try to send basic http request" << lend;
             string _http_pkg = "GET / HTTP/1.1\r\n\r\n";
-            sl_tcp_socket_send(_tso, _http_pkg);
-            sl_tcp_socket_monitor(_tso, [&](sl_event e) {
+            sl_tcp_socket_send(e.so, _http_pkg);
+            sl_tcp_socket_monitor(e.so, [=](sl_event e) {
                 if ( e.event == SL_EVENT_FAILED ) {
                     lerror << "no response get from the server." << lend;
                     sl_socket_close(e.so);
                     return;
                 }
                 string _http_resp;
-                sl_tcp_socket_read(_tso, _http_resp, 1024000);
+                sl_tcp_socket_read(e.so, _http_resp, 1024000);
                 dump_hex(_http_resp);
                 sl_socket_close(e.so);
             });
