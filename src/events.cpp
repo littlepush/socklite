@@ -203,12 +203,17 @@ void sl_events::_internal_worker()
         if ( !events_pool_.wait_for(milliseconds(10), [&](sl_event&& e){
             _local_event = e;
         }) ) continue;
-        sl_handler_set _hs = sl_event_find_handler(_local_event.so);
+        SOCKET_T _s = ((_local_event.event == SL_EVENT_ACCEPT) && 
+                        (_local_event.socktype == IPPROTO_TCP)) ? 
+                        _local_event.source : _local_event.so;
+        sl_handler_set _hs = sl_event_find_handler(_s);
         // Remove current event handler
         sl_event_bind_handler(_local_event.so, move(sl_event_empty_handler()));
         sl_socket_event_handler _seh = (&_hs.on_accept)[SL_MACRO_LAST_1_INDEX(_local_event.event)];
         if ( !_seh ) {
-            lwarning << "No handler bind for event: " << _local_event.event << " on socket " << _local_event.so << lend;
+            lwarning << "No handler bind for event: " << 
+                _local_event.event << " on socket " << 
+                _local_event.so << lend;
         } else {
             _seh(_local_event);
         }
