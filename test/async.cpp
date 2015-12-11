@@ -68,6 +68,38 @@ int main( int argc, char * argv[] )
             });
         });     
     }
+
+    SOCKET_T _ptso = sl_tcp_socket_init();
+    if ( SOCKET_NOT_VALIDATE(_ptso) ) {
+        lerror << "failed to init a socket for socks5 proxy testing" << lend;
+    } else {
+        string _proxy_domain = "www.google.com";
+        ldebug << "before connect to " << _proxy_domain << lend;
+        sl_tcp_socket_connect(_ptso, sl_peerinfo("127.0.0.1:1080"), _proxy_domain, 80, [_proxy_domain](sl_event e) {
+            if ( e.event == SL_EVENT_FAILED ) {
+                lerror << "failed to connect to " << _proxy_domain << " via socks5 proxy 127.0.0.1:1080" << lend;
+                sl_socket_close(e.so);
+                return;
+            }
+            linfo << "did connected to " << _proxy_domain << lend;
+            sl_socket_close(e.so);
+        });
+    }
+
+    SOCKET_T _sso = sl_tcp_socket_init();
+    if ( SOCKET_NOT_VALIDATE(_sso) ) {
+        lerror << "failed to init a socket for listening" << lend;
+    } else {
+        sl_tcp_socket_listen(_sso, sl_peerinfo(INADDR_ANY, 1090), [&](sl_event e) {
+            string _buf;
+            sl_tcp_socket_read(e.so, _buf, 1024);
+            dump_hex(_buf);
+            sl_tcp_socket_send(e.so, _buf);
+            sl_tcp_socket_monitor(e.so, [&](sl_event e) {
+                sl_socket_close(e.so);
+            });
+        });
+    }
     return 0;
 }
 

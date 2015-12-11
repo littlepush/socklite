@@ -51,6 +51,7 @@ bool sl_tcp_socket_connect(SOCKET_T tso, const sl_peerinfo& socks5, const string
 bool sl_tcp_socket_send(SOCKET_T tso, const string &pkg);
 bool sl_tcp_socket_monitor(SOCKET_T tso, sl_socket_event_handler callback);
 bool sl_tcp_socket_read(SOCKET_T tso, string& buffer, size_t max_buffer_size = 4098);
+bool sl_tcp_socket_listen(SOCKET_T tso, const sl_peerinfo& bind_port, sl_socket_event_handler accept_callback);
 
 // UDP Methods
 SOCKET_T sl_udp_socket_init();

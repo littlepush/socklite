@@ -329,7 +329,71 @@ bool sl_tcp_socket_read(SOCKET_T tso, string& buffer, size_t max_buffer_size)
     } while ( true );
     return true;
 }
+bool sl_tcp_socket_listen(SOCKET_T tso, const sl_peerinfo& bind_port, sl_socket_event_handler accept_callback)
+{
+    if ( SOCKET_NOT_VALIDATE(tso) ) return false;
+    struct sockaddr_in _sock_addr;
+    memset((char *)&_sock_addr, 0, sizeof(_sock_addr));
+    _sock_addr.sin_family = AF_INET;
+    _sock_addr.sin_port = htons(bind_port.port_number);
+    _sock_addr.sin_addr.s_addr = bind_port.ipaddress;
 
+    sl_events::server().update_handler(tso, SL_EVENT_ACCEPT, [accept_callback](sl_event e) {
+        if ( e.event != SL_EVENT_ACCEPT ) {
+            lerror << "the incoming socket event is not an accept event." << lend;
+            return;
+        }
+        // Set With TCP_NODELAY
+        int flag = 1;
+        if( setsockopt( e.so, IPPROTO_TCP, 
+            TCP_NODELAY, (const char *)&flag, sizeof(int) ) == -1 )
+        {
+            lerror << "failed to set the tcp socket(" << e.so << ") to be TCP_NODELAY: " << ::strerror( errno ) << lend;
+            SL_NETWORK_CLOSESOCK( e.so );
+            return;
+        }
+
+        int _reused = 1;
+        if ( setsockopt( e.so, SOL_SOCKET, SO_REUSEADDR,
+            (const char *)&_reused, sizeof(int) ) == -1)
+        {
+            lerror << "failed to set the tcp socket(" << e.so << ") to be SO_REUSEADDR: " << ::strerror( errno ) << lend;
+            SL_NETWORK_CLOSESOCK( e.so );
+            return;
+        }
+
+        unsigned long _u = 1;
+        if ( SL_NETWORK_IOCTL_CALL(e.so, FIONBIO, &_u) < 0 ) 
+        {
+            lerror << "failed to set the tcp socket(" << e.so << ") to be Non Blocking: " << ::strerror( errno ) << lend;
+            SL_NETWORK_CLOSESOCK( e.so );
+            return;
+        }
+
+        sl_events::server().bind(e.so, sl_event_empty_handler());
+
+        sl_tcp_socket_monitor(e.so, [accept_callback](sl_event e) {
+            if ( e.event == SL_EVENT_FAILED ) {
+                sl_socket_close(e.so);
+                return;
+            } else {
+                accept_callback(e);
+            }
+        });
+    });
+
+    if ( ::bind(tso, (struct sockaddr *)&_sock_addr, sizeof(_sock_addr)) == -1 ) {
+        lerror << "failed to listen on " << bind_port << ": " << ::strerror( errno ) << lend;
+        return false;
+    }
+    if ( -1 == ::listen(tso, 1024) ) {
+        lerror << "failed to listen on " << bind_port << ": " << ::strerror( errno ) << lend;
+        return false;
+    }
+    linfo << "start to listening on " << bind_port << lend;
+    sl_poller::server().bind_tcp_server(tso);
+    return true;
+}
 // UDP Methods
 SOCKET_T sl_udp_socket_init()
 {
