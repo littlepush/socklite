@@ -33,41 +33,112 @@
 #include <queue>
 #include <functional>
 #include <csignal>
+#include <map>
+#include <iostream>
+#include <unistd.h>
 
 using namespace std;
 
 namespace cpputility {
 
+    // Internal Mutex
+    static mutex& __g_thread_mutex() {
+        static mutex _m;
+        return _m;
+    }
+    static mutex& __g_thread_infom_mutex() {
+        static mutex _im;
+        return _im;
+    }
+    static void __h_thread_signal( int sig ) {
+        if ( SIGTERM == sig || SIGINT == sig || SIGQUIT == sig ) {
+            __g_thread_mutex().unlock();
+        }
+    }
+    static map< thread::id, pair< shared_ptr<mutex>, shared_ptr<bool> > >& __g_threadinfo() {
+        static map< thread::id, pair< shared_ptr<mutex>, shared_ptr<bool> > > _m;
+        return _m;
+    }
+
     // Hang up current process, and wait for exit signal
-    void set_signal_handler();
+    static void set_signal_handler() {
+    #ifdef __APPLE__
+        signal(SIGINT, __h_thread_signal);
+        signal(SIGINT, __h_thread_signal);
+        signal(SIGQUIT, __h_thread_signal);
+    #elif ( defined WIN32 | defined _WIN32 | defined WIN64 | defined _WIN64 )
+        // nothing
+    #else
+        sigset_t sgset, osgset;
+        sigfillset(&sgset);
+        sigdelset(&sgset, SIGTERM); 
+        sigdelset(&sgset, SIGINT);
+        sigdelset(&sgset, SIGQUIT);
+        sigdelset(&sgset, 11);
+        sigprocmask(SIG_SETMASK, &sgset, &osgset);
+        signal(SIGTERM, __h_thread_signal);
+        signal(SIGINT, __h_thread_signal);
+        signal(SIGQUIT, __h_thread_signal);
+    #endif
+        __g_thread_mutex().lock();
+    }
 
     // Wait until we receive exit signal, this function will block
     // current thread.
-    void wait_for_exit_signal();
+    static void wait_for_exit_signal() {
+        __g_thread_mutex().lock();
+        __g_thread_mutex().unlock();
+    }
 
     // Register current thread
-    void register_this_thread();
+    static void register_this_thread() {
+        lock_guard<mutex> _(__g_thread_infom_mutex());
+        __g_threadinfo()[this_thread::get_id()] = make_pair(make_shared<mutex>(), make_shared<bool>(true));
+    }
 
     // Unregister current thread and release the resource
     // then can join the thread.
-    void unregister_this_thread();
+    static void unregister_this_thread() {
+        lock_guard<mutex> _(__g_thread_infom_mutex());
+        __g_threadinfo().erase(this_thread::get_id());
+    }
 
     // Stop all thread registered
-    void join_all_threads();
+    static void join_all_threads() {
+        lock_guard<mutex> _(__g_thread_infom_mutex());
+        for ( auto &_kv : __g_threadinfo() ) {
+            lock_guard<mutex>(*_kv.second.first);
+            *_kv.second.second = false;
+        }
+    }
 
     // join specified thread
-    void safe_join_thread(thread::id tid);
+    static void safe_join_thread(thread::id tid) {
+        lock_guard<mutex> _(__g_thread_infom_mutex());
+        auto _it = __g_threadinfo().find(this_thread::get_id());
+        if ( _it == end(__g_threadinfo()) ) return;
+        lock_guard<mutex>(*_it->second.first);
+        *_it->second.second = false;
+    }
 
     // Check this thread's status
-    bool this_thread_is_running();
+    static bool this_thread_is_running() {
+        lock_guard<mutex> _(__g_thread_infom_mutex());
+        auto _it = __g_threadinfo().find(this_thread::get_id());
+        if ( _it == end(__g_threadinfo()) ) { return false; }
+        lock_guard<mutex>(*_it->second.first);
+        return *_it->second.second;
+    }
 
+    // Thread Agent to auto register and unregister the thread to the thread info map
     class thread_agent
     {
     public:
-        thread_agent();
-        ~thread_agent();
+        thread_agent() { register_this_thread(); }
+        ~thread_agent() { unregister_this_thread(); }
     };
 
+    // The global server signal agent. should be the first line in any application
     class signal_agent
     {
     public:
@@ -75,8 +146,13 @@ namespace cpputility {
     protected:
         before_exit_t                       exit_callback_;
     public:
-        signal_agent(before_exit_t cb);
-        ~signal_agent();
+        signal_agent(before_exit_t cb) : exit_callback_(cb) { set_signal_handler(); };
+        ~signal_agent() {
+            wait_for_exit_signal();
+            join_all_threads();
+            if ( exit_callback_ ) exit_callback_() ;
+            usleep(100000); // sleep 100ms before exit
+        }
     };
 
     template < class Item > class event_pool

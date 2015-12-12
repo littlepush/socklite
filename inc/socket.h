@@ -96,8 +96,8 @@ using namespace std;
 #endif
 
 // Use the Cpp Utility Log
-#include "log.h"
-#include "thread.h"
+#include "thread.hpp"
+#include "log.hpp"
 
 using namespace cpputility;
 
