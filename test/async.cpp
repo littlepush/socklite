@@ -28,6 +28,21 @@ void dump_iplist(const vector<sl_ip> & iplist) {
     }
 }
 
+void tcp_redirect_callback(sl_event e, sl_event re) {
+    if ( e.event == SL_EVENT_FAILED ) {
+        linfo << "socket has disconnected" << lend;
+        sl_socket_close(e.so);
+        sl_socket_close(re.so);
+        return;
+    }
+    string _buf;
+    sl_tcp_socket_read(e.so, _buf, 512000);
+    sl_tcp_socket_send(re.so, _buf);
+    sl_tcp_socket_monitor(e.so, [re](sl_event e) {
+        tcp_redirect_callback(e, re);
+    });
+}
+
 int main( int argc, char * argv[] )
 {
     cp_logger::start(stderr, log_debug);
@@ -91,11 +106,13 @@ int main( int argc, char * argv[] )
         lerror << "failed to init a socket for listening" << lend;
     } else {
         sl_tcp_socket_listen(_sso, sl_peerinfo(INADDR_ANY, 1090), [&](sl_event e) {
-            string _buf;
-            sl_tcp_socket_read(e.so, _buf, 1024);
-            dump_hex(_buf);
-            sl_tcp_socket_send(e.so, _buf);
-            sl_socket_close(e.so);
+            sl_tcp_socket_monitor(e.so, [&](sl_event e){
+                string _buf;
+                sl_tcp_socket_read(e.so, _buf, 1024);
+                dump_hex(_buf);
+                sl_tcp_socket_send(e.so, _buf);
+                sl_socket_close(e.so);
+            });
         });
     }
 
@@ -167,6 +184,40 @@ int main( int argc, char * argv[] )
             });
         });
     }
+
+    SOCKET_T _rso = sl_tcp_socket_init();
+    sl_tcp_socket_listen(_rso, sl_peerinfo(INADDR_ANY, 58422), [&](sl_event e){
+        SOCKET_T _redirect_so = sl_tcp_socket_init();
+        ldebug << "receive a socket: " << e.so << ", create a redirect socket: " << _redirect_so << lend;
+        sl_tcp_socket_connect(_redirect_so, sl_peerinfo("127.0.0.1:1080"), "106.187.97.108", 38422, [e](sl_event re){
+            if ( re.event == SL_EVENT_FAILED ) {
+                lerror << "cannot connect to 106.187.97.108:38422" << lend;
+                sl_socket_close(re.so);
+                sl_socket_close(e.so);
+                return;
+            }
+            ldebug << "did connect to 106.187.97.108:38422 via proxy use socket " << re.so << lend;
+            if ( !sl_tcp_socket_monitor(e.so, [re](sl_event e){
+                tcp_redirect_callback(e, re);
+            }) ) {
+                sl_socket_close(e.so);
+                sl_socket_close(re.so);
+                return;
+            }
+            if ( !sl_tcp_socket_monitor(re.so, [e](sl_event re){
+                tcp_redirect_callback(re, e);
+            }) ) {
+                sl_socket_close(e.so);
+                sl_socket_close(re.so);
+                return;
+            }
+        }) ? [](){
+            linfo << "the connect return true, wait for the next runloop to monitor the result" << lend;
+        }() : [e]() {
+            lerror << "failed to create a connection to the redirected server." << lend;
+            sl_socket_close(e.so);
+        }();
+    });
     return 0;
 }
 

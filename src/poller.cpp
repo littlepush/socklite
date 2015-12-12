@@ -203,8 +203,8 @@ size_t sl_poller::fetch_events( sl_poller::earray &events, unsigned int timedout
 	return events.size();
 }
 
-void sl_poller::monitor_socket( SOCKET_T so, bool oneshot, SL_EVENT_ID eid, bool isreset ) {
-	if ( m_fd == -1 ) return;
+bool sl_poller::monitor_socket( SOCKET_T so, bool oneshot, SL_EVENT_ID eid, bool isreset ) {
+	if ( m_fd == -1 ) return false;
 #if SL_TARGET_LINUX
 
 	// Socket must be nonblocking
@@ -221,7 +221,10 @@ void sl_poller::monitor_socket( SOCKET_T so, bool oneshot, SL_EVENT_ID eid, bool
 		_ee.events |= EPOLLONESHOT;
 		if ( isreset ) _op = EPOLL_CTL_MOD;
 	}
-	epoll_ctl( m_fd, _op, so, &_ee );
+	if ( -1 == epoll_ctl( m_fd, _op, so, &_ee ) ) {
+		lerror << "failed to monitor the socket " << so << ": " << :strerror(errno) << lend;
+		return false;
+	}
 #elif SL_TARGET_MAC
 	struct kevent _ke;
 	unsigned short _flags = EV_ADD;
@@ -231,16 +234,19 @@ void sl_poller::monitor_socket( SOCKET_T so, bool oneshot, SL_EVENT_ID eid, bool
 	if ( eid & SL_EVENT_DATA ) {
 		EV_SET(&_ke, so, EVFILT_READ, _flags, 0, 0, NULL);
 		if ( -1 == kevent(m_fd, &_ke, 1, NULL, 0, NULL) ) {
-			lerror << "failed to monitor the socket " << so << lend;
+			lerror << "failed to monitor the socket for read " << so << ": " << ::strerror(errno) << lend;
+			return false;
 		}
 	}
 	if ( eid & SL_EVENT_WRITE ) {
 		EV_SET(&_ke, so, EVFILT_WRITE, _flags, 0, 0, NULL);
 		if ( -1 == kevent(m_fd, &_ke, 1, NULL, 0, NULL) ) {
-			lerror << "failed to monitor the socket " << so << lend;
+			lerror << "failed to monitor the socket for write " << so << ": " << ::strerror(errno) << lend;
+			return false;
 		}
 	}
 #endif
+	return true;
 }
 
 sl_poller &sl_poller::server() {

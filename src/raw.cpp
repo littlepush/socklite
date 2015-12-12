@@ -27,6 +27,7 @@ void sl_socket_close(SOCKET_T so)
 {
     if ( SOCKET_NOT_VALIDATE(so) ) return;
     //sl_event_unbind_handler(so);
+    ldebug << "the socket " << so << " will be unbind and closed" << lend;
     sl_events::server().unbind(so);
     close(so);
 }
@@ -102,7 +103,10 @@ bool sl_tcp_socket_connect(SOCKET_T tso, const sl_peerinfo& peer, sl_socket_even
         } else {
             // Monitor the socket, the poller will invoke on_connect when the socket is connected or failed.
             ldebug << "monitor tcp socket " << tso << " for connecting" << lend;
-            sl_poller::server().monitor_socket(tso, true, SL_EVENT_CONNECT);
+            if ( !sl_poller::server().monitor_socket(tso, true, SL_EVENT_CONNECT) ) {
+                //sl_events::server().add_tcpevent(tso, SL_EVENT_FAILED);
+                return false;
+            }
         }
     } else {
         // Add to next run loop to process the connect event.
@@ -137,7 +141,7 @@ bool sl_tcp_socket_connect(SOCKET_T tso, const sl_peerinfo& socks5, const string
 {
     if ( socks5 ) {
         ldebug << "try to connect via a socks5 proxy: " << socks5 << lend;
-        return ( !sl_tcp_socket_connect(tso, socks5, [socks5, host, port, callback](sl_event e){
+        return ( sl_tcp_socket_connect(tso, socks5, [socks5, host, port, callback](sl_event e){
             if ( e.event == SL_EVENT_FAILED ) {
                 lerror << "the socks5 proxy cannot be connected" << socks5 << lend;
                 callback(e); return;
@@ -223,7 +227,7 @@ bool sl_tcp_socket_connect(SOCKET_T tso, const sl_peerinfo& socks5, const string
                     }
                     e.event = SL_EVENT_CONNECT; callback(e);
                 });
-            });
+            }) ? void() : [&e, callback](){ e.event = SL_EVENT_FAILED; callback(e); }();
         }));
     } else {
         ldebug << "the socks5 is empty, try to connect to host(" << host << ") directly" << lend;
@@ -260,6 +264,7 @@ bool sl_tcp_socket_send(SOCKET_T tso, const string &pkg)
     if ( pkg.size() == 0 ) return false;
     if ( SOCKET_NOT_VALIDATE(tso) ) return false;
 
+    ldebug << "will write data(l:" << pkg.size() << ") to tcp socket: " << tso << lend;
     int _lastSent = 0;
 
     unsigned int _length = pkg.size();
@@ -297,8 +302,7 @@ bool sl_tcp_socket_monitor(SOCKET_T tso, sl_socket_event_handler callback)
         callback(e);
     });
 
-    sl_poller::server().monitor_socket(tso, true, SL_EVENT_DEFAULT, true);
-    return true;
+    return sl_poller::server().monitor_socket(tso, true, SL_EVENT_DEFAULT, true);
 }
 bool sl_tcp_socket_read(SOCKET_T tso, string& buffer, size_t max_buffer_size)
 {
@@ -371,15 +375,7 @@ bool sl_tcp_socket_listen(SOCKET_T tso, const sl_peerinfo& bind_port, sl_socket_
         }
 
         sl_events::server().bind(e.so, sl_event_empty_handler());
-
-        sl_tcp_socket_monitor(e.so, [accept_callback](sl_event e) {
-            if ( e.event == SL_EVENT_FAILED ) {
-                sl_socket_close(e.so);
-                return;
-            } else {
-                accept_callback(e);
-            }
-        });
+        accept_callback(e);
     });
 
     if ( ::bind(tso, (struct sockaddr *)&_sock_addr, sizeof(_sock_addr)) == -1 ) {
@@ -393,6 +389,19 @@ bool sl_tcp_socket_listen(SOCKET_T tso, const sl_peerinfo& bind_port, sl_socket_
     linfo << "start to listening tcp on " << bind_port << lend;
     sl_poller::server().bind_tcp_server(tso);
     return true;
+}
+sl_peerinfo sl_tcp_get_original_dest(SOCKET_T tso)
+{
+    if ( SOCKET_NOT_VALIDATE(tso) ) return sl_peerinfo(INADDR_ANY, 0);
+#if SL_TARGET_LINUX
+    struct sockaddr_in _dest_addr;
+    socklen_t _socklen = sizeof(_dest_addr);
+    int _error = getsockopt( tso, SOL_IP, SO_ORIGINAL_DST, &_dest_addr, &_socklen );
+    if ( _error ) return sl_peerinfo(INADDR_ANY, 0);
+    return sl_peerinfo(_dest_addr.sin_addr.s_addr, ntohs(_dest_addr.sin_port));
+#else
+    return sl_peerinfo(INADDR_ANY, 0);
+#endif
 }
 // UDP Methods
 SOCKET_T sl_udp_socket_init()
@@ -479,9 +488,7 @@ bool sl_udp_socket_monitor(SOCKET_T uso, const sl_peerinfo& peer, sl_socket_even
         callback(e);
     });
     ldebug << "did update the handler for udp socket " << uso << " on SL_EVENT_READ(2) and SL_EVENT_FAILED(4)" << lend;
-    sl_poller::server().monitor_socket(uso, true, SL_EVENT_DEFAULT);
-    ldebug << "did add the udp socket " << uso << " to internal poller to monitor the incoming data" << lend;
-    return true;
+    return sl_poller::server().monitor_socket(uso, true, SL_EVENT_DEFAULT);
 }
 bool sl_udp_socket_read(SOCKET_T uso, struct sockaddr_in addr, string& buffer, size_t max_buffer_size)
 {
@@ -612,7 +619,13 @@ void __sl_async_gethostnmae_udp(const string&& query_pkg, size_t use_index, asyn
         } else {
             __sl_async_gethostnmae_udp(move(query_pkg), use_index + 1, fp);
         }
-    });
+    }) ? void() : [&query_pkg, use_index, fp, _uso](){
+        lerror << "failed to monitor on " << _uso << lend;
+        sl_socket_close(_uso);
+        // Go next server
+        __sl_async_gethostnmae_udp(move(query_pkg), use_index + 1, fp);
+        return;
+    }();
 }
 void __sl_async_gethostnmae_tcp(const string&& query_pkg, size_t use_index, async_dns_handler fp)
 {
@@ -671,7 +684,11 @@ void __sl_async_gethostnmae_tcp(const string&& query_pkg, size_t use_index, asyn
             } else {
                 __sl_async_gethostnmae_udp(move(query_pkg), use_index + 1, fp);
             }
-        });
+        }) ? void() : [&query_pkg, use_index, fp, e](){
+            lerror << "failed to monitor on " << e.so << lend;
+            sl_socket_close(e.so);
+            __sl_async_gethostnmae_udp(move(query_pkg), use_index + 1, fp);
+        }();
     });
 }
 void sl_async_gethostname(const string& host, async_dns_handler fp)
