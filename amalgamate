@@ -13,17 +13,20 @@ echo "// Current Version: "$(./version) >> $fheader
 echo "" >> $fheader
 echo "#pragma once" >> $fheader
 
+headerfiles=("thread.h" "log.h" "string_format.hpp" "dns.h" "socket.h" "poller.h" "events.h" "socks5.h" "raw.h" "tcpsocket.h" "udpsocket.h")
+
 function split_headerfile() {
 	fname=$1
 	sp=$(cat $fname | grep -n "#if" | head -n 1 | awk -F":" '{print $1}')
 	ep=$(cat $fname | grep -n "#endif" | tail -n 1 | awk -F":" '{print $1}')
-	sed -n "${sp},${ep}p" $fname |
-		grep -v "#include \"socket.h\"" |
-		grep -v "#include \"log.h\"" | 
-		grep -v "#include \"thread.h\"" >> $fheader
+	sed -n "${sp},${ep}p" ${fname} > .tmp
+	for h in ${headerfiles[@]}; do
+		cat .tmp | grep -v -E "#include \"${h}\"" > .tmp1
+		mv .tmp1 .tmp
+	done
+	cat .tmp >> ${fheader}
+	rm .tmp
 }
-
-headerfiles=( "thread.h" "log.h" "socket.h" "events.h" "socks5.h" "poller.h" "tcpsocket.h" "udpsocket.h")
 
 for h in ${headerfiles[@]}; do
 	echo "// inc/${h}" >> $fheader
@@ -42,6 +45,8 @@ echo "// Current Version: "$(./version) >> $fsource
 echo "" >> $fsource
 echo "#include \"socketlite.h\"" >> $fsource
 
+sourcefiles=( "thread.cpp" "log.cpp" "dns.cpp" "socket.cpp" "poller.cpp" "events.cpp" "socks5.cpp" "raw.cpp" "tcpsocket.cpp" "udpsocket.cpp")
+
 function split_sourcefile() {
 	fname=$1
 	f=$(basename ${fname})
@@ -49,13 +54,14 @@ function split_sourcefile() {
 	sp=$(cat $fname | grep -n "#include \"${f}.h\"" | awk -F":" '{print $1}')
 	sp=$((sp+1))
 	ep=$(cat $fname | wc -l)
-	sed -n "${sp},${ep}p" $fname |
-		grep -v "#include \"socks5.h\"" |
-		grep -v "#include \"tcpsocket.h\"" |
-		grep -v "#include \"thread.h\"" >> $fsource
+	sed -n "${sp},${ep}p" $fname > .tmp
+	for h in ${headerfiles[@]}; do
+		cat .tmp | grep -v -E "#include \"${h}\"" > .tmp1
+		mv .tmp1 .tmp
+	done
+	cat .tmp >> ${fsource}
+	rm .tmp
 }
-
-sourcefiles=( "thread.cpp" "log.cpp" "socket.cpp" "events.cpp" "socks5.cpp" "poller.cpp" "tcpsocket.cpp" "udpsocket.cpp")
 
 for c in ${sourcefiles[@]}; do
 	echo "// src/${c}" >> $fsource

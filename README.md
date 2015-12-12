@@ -8,7 +8,7 @@ For TCP socket, can connect to peer via a SOCKS5 proxy.
 
 I also provide a simpale example for creating a socks5 proxy server side.
 
-How to use
+How to use the sync-api
 ===
 ```c++
 #include <sl/socket.h>
@@ -82,6 +82,56 @@ void worker_listen( unsigned int port ) {
 }
 ```
 
+How to use the async-api:
+===
+
+The following code is a dns redirect server via a tcp socks5 proxy
+
+```c++
+SOCKET_T _dsso = sl_udp_socket_init();
+if ( SOCKET_NOT_VALIDATE(_dsso) ) {
+    lerror << "failed to init a socket for proxy udp dns listening" << lend;
+} else {
+    sl_udp_socket_listen(_dsso, sl_peerinfo(INADDR_ANY, 2001), [&](sl_event e) {
+        string _dnspkg;
+        sl_udp_socket_read(e.so, e.address, _dnspkg);
+        string _domain;
+        dns_get_domain(_dnspkg.c_str(), _dnspkg.size(), _domain);
+        // const clnd_dns_package *_pkg = (const clnd_dns_package *)_dnspkg.c_str();
+        // uint16_t _tid = _pkg->get_transaction_id();
+        sl_peerinfo _pi(e.address.sin_addr.s_addr, ntohs(e.address.sin_port));
+        linfo << "get request from " << _pi << " to query domain " << _domain << lend;
+        SOCKET_T _tso = sl_tcp_socket_init();
+        sl_tcp_socket_connect(
+            _tso, sl_peerinfo("127.0.0.1:1080"), "8.8.8.8", 53, 
+            [e, _dnspkg, _pi](sl_event te) {
+            if ( te.event == SL_EVENT_FAILED ) {
+                lerror << "failed to connect to 8.8.8.8:53 via socks5 127.0.0.1:1080" << lend;
+                sl_socket_close(te.so);
+                return;
+            }
+            string _tcp_dns;
+            dns_generate_tcp_redirect_package(_dnspkg, _tcp_dns);
+            sl_tcp_socket_send(te.so, _tcp_dns);
+            sl_tcp_socket_monitor(te.so, [e, _pi](sl_event te) {
+                if ( te.event == SL_EVENT_FAILED ) {
+                    lerror << "the connection has been dropped for tcp socket: " << te.so << lend;
+                    sl_socket_close(te.so);
+                    return;
+                }
+                string _resp;
+                sl_tcp_socket_read(te.so, _resp);
+                // Release the tcp socket
+                sl_socket_close(te.so);
+                string _udp_resp;
+                dns_generate_udp_response_package_from_tcp(_resp, _udp_resp);
+                sl_udp_socket_send(e.so, _udp_resp, _pi);
+            });
+        });
+    });
+}
+```
+
 Use with your project
 ===
 1. Use shared library
@@ -120,4 +170,6 @@ v0.3 Format the socks5 proxy package, support connect to socks5 proxy with usern
 v0.4 Support amalgamate script, re-write `sl_socket::read_data` to avoid unfinished package.
 
 v0.5 Rewrite UDP socket, use `sl_poller` to monitor the UDP connections.
+
+v0.6 Add log/multiple thread support, add async api for all socket type
 

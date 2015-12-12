@@ -20,7 +20,6 @@
     or @me on twitter: @littlepush
 */
 
-#include "events.h"
 #include "poller.h"
 
 sl_poller::sl_poller()
