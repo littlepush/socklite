@@ -22,6 +22,11 @@
 
 #include "raw.h"
 #include <errno.h>
+    
+#if SL_TARGET_LINUX
+#include <limits.h>
+#include <linux/netfilter_ipv4.h>
+#endif
 
 void sl_socket_close(SOCKET_T so)
 {
