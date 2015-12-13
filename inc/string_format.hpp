@@ -30,6 +30,8 @@
 #include <vector>
 #include <algorithm>
 #include <memory>
+#include <stdio.h>
+#include <string.h>
 
 using namespace std;
 
