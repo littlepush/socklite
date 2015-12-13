@@ -189,8 +189,8 @@ void sl_events::_internal_remove_worker()
     if ( thread_pool_.size() == 0 ) return;
     thread *_last_worker = *thread_pool_.rbegin();
     thread_pool_.pop_back();
-    safe_join_thread(_last_worker->get_id());
     if ( _last_worker->joinable() ) {
+        safe_join_thread(_last_worker->get_id());
         _last_worker->join();
     }
     delete _last_worker;

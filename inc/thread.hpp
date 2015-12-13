@@ -24,8 +24,6 @@
 
 #ifndef __CPP_UTILITY_THREAD_H__
 #define __CPP_UTILITY_THREAD_H__
-
-#define SOCK_LITE_INTEGRATION_THREAD
     
 #include <thread>
 #include <mutex>
