@@ -85,21 +85,25 @@ namespace cpputility {
     }
 
 
-    typedef struct tag_log_arguments {
+    class log_arguments {
+    private:
         cp_log_level            log_lv;
         bool                    log_to_sys;
         string                  log_path;
         FILE*                   log_fp;
         thread*                 log_thread;
         event_pool<log_item_t>  log_pool;
+        bool                    log_status;
+        mutex                   log_mutex;
 
-        tag_log_arguments() : 
+        log_arguments() : 
             log_lv(log_info), 
             log_to_sys(false),
             log_fp(NULL),
-            log_thread(NULL)
+            log_thread(NULL),
+            log_status(false)
         {
-            log_thread = new thread([this](){
+            log_thread = new thread([&](){
                 thread_agent _ta;
 
                 log_item_t _logitem;
@@ -107,12 +111,15 @@ namespace cpputility {
                     if ( !this->log_pool.wait_for(milliseconds(10), [&](log_item_t&& line){
                                 _logitem.swap(line);
                             }) ) continue;
+                    lock_guard<mutex> _(log_mutex);
+                    if ( log_status == false ) continue;
+
                     if ( this->log_fp != NULL ) {
                         fprintf(this->log_fp, "%s\n", _logitem.second.c_str());
                     } else if ( this->log_to_sys ) {
                         // Syslog
                         syslog(_logitem.first, "%s\n", _logitem.second.c_str());
-                    } else {
+                    } else if ( this->log_path.size() > 0 ) {
                         // To file
                         do {
                             this->log_fp = fopen(this->log_path.c_str(), "a+");
@@ -124,13 +131,16 @@ namespace cpputility {
                 }
             });
         }
-        ~tag_log_arguments()
+
+    public:
+        ~log_arguments()
         {
             // Check and stop the log system
             //cp_log_stop();
             if ( log_thread != NULL ) {
-                safe_join_thread(log_thread->get_id());
-                log_thread->join();
+                if ( log_thread->joinable() ) {
+                    log_thread->join();
+                }
                 delete log_thread;
                 log_thread = NULL;
             }
@@ -146,6 +156,9 @@ namespace cpputility {
             log_path = logpath;
             log_lv = lv;
             log_to_sys = false;
+
+            lock_guard<mutex> _(log_mutex);
+            log_status = true;
         }
 
         void start(FILE *fp, cp_log_level lv) {
@@ -153,6 +166,9 @@ namespace cpputility {
             log_lv = lv;
             log_path = "";
             log_to_sys = false;
+
+            lock_guard<mutex> _(log_mutex);
+            log_status = true;
         }
 
         void start(cp_log_level lv, const string& logname) {
@@ -163,6 +179,9 @@ namespace cpputility {
             log_lv = lv;
             log_fp = NULL;
             log_path = "";
+
+            lock_guard<mutex> _(log_mutex);
+            log_status = true;
         }
 
         void log(cp_log_level lv, const char *format, ...) {
@@ -190,13 +209,12 @@ namespace cpputility {
 
             log_pool.notify_one(make_pair(lv, _logline));
         }
-    } log_arguments;
 
-    // Static Log Arguments Instance Method
-    static log_arguments& cp_log_args() {
-        static log_arguments _arg;
-        return _arg;
-    }
+        static log_arguments& instance() {
+            static log_arguments _arg;
+            return _arg;
+        }
+    };
 
     // The end line struct is just a place hold
     class cp_logger_specifical_character
@@ -299,13 +317,13 @@ namespace cpputility {
 
     public:
         static void start(const string &logpath, cp_log_level lv) {
-            cp_log_args().start(logpath, lv);
+            log_arguments::instance().start(logpath, lv);
         }
         static void start(FILE *fp, cp_log_level lv) {
-            cp_log_args().start(fp, lv);
+            log_arguments::instance().start(fp, lv);
         }
         static void start(cp_log_level lv, const string& logname) {
-            cp_log_args().start(lv, logname);
+            log_arguments::instance().start(lv, logname);
         }
     };
 
@@ -332,7 +350,7 @@ namespace cpputility {
             return logger << item();
         }
         // Write the log
-        cp_log_args().log(logger.lv_, "%s", logger.oss_.str().c_str());
+        log_arguments::instance().log(logger.lv_, "%s", logger.oss_.str().c_str());
         logger.oss_.str("");
         logger.oss_.clear();
 

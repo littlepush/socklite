@@ -42,26 +42,19 @@ using namespace std;
 namespace cpputility {
 
     // Internal Mutex
-    static mutex& __g_thread_mutex() {
+    inline mutex& __g_thread_mutex() {
         static mutex _m;
         return _m;
     }
-    static mutex& __g_thread_infom_mutex() {
-        static mutex _im;
-        return _im;
-    }
-    static void __h_thread_signal( int sig ) {
+
+    inline void __h_thread_signal( int sig ) {
         if ( SIGTERM == sig || SIGINT == sig || SIGQUIT == sig ) {
             __g_thread_mutex().unlock();
         }
     }
-    static map< thread::id, pair< shared_ptr<mutex>, shared_ptr<bool> > >& __g_threadinfo() {
-        static map< thread::id, pair< shared_ptr<mutex>, shared_ptr<bool> > > _m;
-        return _m;
-    }
 
     // Hang up current process, and wait for exit signal
-    static void set_signal_handler() {
+    inline void set_signal_handler() {
     #ifdef __APPLE__
         signal(SIGINT, __h_thread_signal);
         signal(SIGINT, __h_thread_signal);
@@ -85,49 +78,86 @@ namespace cpputility {
 
     // Wait until we receive exit signal, this function will block
     // current thread.
-    static void wait_for_exit_signal() {
+    inline void wait_for_exit_signal() {
         __g_thread_mutex().lock();
         __g_thread_mutex().unlock();
     }
 
-    // Register current thread
-    static void register_this_thread() {
-        lock_guard<mutex> _(__g_thread_infom_mutex());
-        __g_threadinfo()[this_thread::get_id()] = make_pair(make_shared<mutex>(), make_shared<bool>(true));
+    class thread_info
+    {
+        typedef map< thread::id, pair< shared_ptr<mutex>, shared_ptr<bool> > > info_map_t;
+    private:
+        mutex               info_mutex_;
+        info_map_t          info_map_;
+    public:
+
+        static thread_info& instance() {
+            static thread_info _ti;
+            return _ti;
+        }
+
+        // Register current thread
+        void register_this_thread() {
+            lock_guard<mutex> _(info_mutex_);
+            info_map_[this_thread::get_id()] = make_pair(make_shared<mutex>(), make_shared<bool>(true));
+        }
+        // Unregister current thread and release the resource
+        // then can join the thread.
+        void unregister_this_thread() {
+            lock_guard<mutex> _(info_mutex_);
+            info_map_.erase(this_thread::get_id());
+        }
+        // Stop all thread registered
+        void join_all_threads() {
+            lock_guard<mutex> _(info_mutex_);
+            for ( auto &_kv : info_map_ ) {
+                lock_guard<mutex>(*_kv.second.first);
+                *_kv.second.second = false;
+            }
+        }
+        // join specified thread
+        void safe_join_thread(thread::id tid) {
+            lock_guard<mutex> _(info_mutex_);
+            auto _it = info_map_.find(tid);
+            if ( _it == end(info_map_) ) {
+                return;
+            }
+            lock_guard<mutex>(*_it->second.first);
+            *_it->second.second = false;
+        }
+        // Check this thread's status
+        bool this_thread_is_running() {
+            lock_guard<mutex> _(info_mutex_);
+            auto _it = info_map_.find(this_thread::get_id());
+            if ( _it == end(info_map_) ) { return false; }
+            lock_guard<mutex> __(*_it->second.first);
+            return *_it->second.second;
+        }
+    };
+
+    inline void register_this_thread() {
+        thread_info::instance().register_this_thread();
     }
 
     // Unregister current thread and release the resource
     // then can join the thread.
-    static void unregister_this_thread() {
-        lock_guard<mutex> _(__g_thread_infom_mutex());
-        __g_threadinfo().erase(this_thread::get_id());
+    inline void unregister_this_thread() {
+        thread_info::instance().unregister_this_thread();
     }
 
     // Stop all thread registered
-    static void join_all_threads() {
-        lock_guard<mutex> _(__g_thread_infom_mutex());
-        for ( auto &_kv : __g_threadinfo() ) {
-            lock_guard<mutex>(*_kv.second.first);
-            *_kv.second.second = false;
-        }
+    inline void join_all_threads() {
+        thread_info::instance().join_all_threads();
     }
 
     // join specified thread
-    static void safe_join_thread(thread::id tid) {
-        lock_guard<mutex> _(__g_thread_infom_mutex());
-        auto _it = __g_threadinfo().find(this_thread::get_id());
-        if ( _it == end(__g_threadinfo()) ) return;
-        lock_guard<mutex>(*_it->second.first);
-        *_it->second.second = false;
+    inline void safe_join_thread(thread::id tid) {
+        thread_info::instance().safe_join_thread(tid);
     }
 
     // Check this thread's status
-    static bool this_thread_is_running() {
-        lock_guard<mutex> _(__g_thread_infom_mutex());
-        auto _it = __g_threadinfo().find(this_thread::get_id());
-        if ( _it == end(__g_threadinfo()) ) { return false; }
-        lock_guard<mutex>(*_it->second.first);
-        return *_it->second.second;
+    inline bool this_thread_is_running() {
+        return thread_info::instance().this_thread_is_running();
     }
 
     // Thread Agent to auto register and unregister the thread to the thread info map

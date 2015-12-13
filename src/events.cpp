@@ -190,7 +190,9 @@ void sl_events::_internal_remove_worker()
     thread *_last_worker = *thread_pool_.rbegin();
     thread_pool_.pop_back();
     safe_join_thread(_last_worker->get_id());
-    _last_worker->join();
+    if ( _last_worker->joinable() ) {
+        _last_worker->join();
+    }
     delete _last_worker;
 }
 void sl_events::_internal_worker()
@@ -279,16 +281,23 @@ void sl_events::run(uint32_t timepiece, sl_runloop_callback cb)
 
 void sl_events::stop_run()
 {
-    lock_guard<mutex> _(running_lock_);
-    if ( is_running_ == false ) return;
-    safe_join_thread(runloop_thread_->get_id());
-    runloop_thread_->join();
+    do {
+        lock_guard<mutex> _(running_lock_);
+        if ( is_running_ == false ) return;
+    } while ( false );
+
+    if ( runloop_thread_->joinable() )  {
+        safe_join_thread(runloop_thread_->get_id());
+        runloop_thread_->join();
+    }
     delete runloop_thread_;
     runloop_thread_ = NULL;
 
     // Close the thread pool manager
-    safe_join_thread(thread_pool_manager_->get_id());
-    thread_pool_manager_->join();
+    if ( thread_pool_manager_->joinable() ) {
+        safe_join_thread(thread_pool_manager_->get_id());
+        thread_pool_manager_->join();
+    }
     delete thread_pool_manager_;
     thread_pool_manager_ = NULL;
 
