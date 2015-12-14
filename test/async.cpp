@@ -112,7 +112,7 @@ int main( int argc, char * argv[] )
                 dump_hex(_buf);
                 sl_tcp_socket_send(e.so, _buf);
                 sl_socket_close(e.so);
-            });
+            }, true);
         });
     }
 
@@ -199,7 +199,7 @@ int main( int argc, char * argv[] )
             ldebug << "did connect to 106.187.97.108:38422 via proxy use socket " << re.so << lend;
             if ( !sl_tcp_socket_monitor(e.so, [re](sl_event e){
                 tcp_redirect_callback(e, re);
-            }) ) {
+            }, true) ) {
                 sl_socket_close(e.so);
                 sl_socket_close(re.so);
                 return;
