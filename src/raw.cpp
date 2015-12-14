@@ -22,7 +22,7 @@
 
 #include "raw.h"
 #include <errno.h>
-    
+
 #if SL_TARGET_LINUX
 #include <limits.h>
 #include <linux/netfilter_ipv4.h>
@@ -409,7 +409,7 @@ sl_peerinfo sl_tcp_get_original_dest(SOCKET_T tso)
 #endif
 }
 // UDP Methods
-SOCKET_T sl_udp_socket_init()
+SOCKET_T sl_udp_socket_init(const sl_peerinfo& bind_addr)
 {
     SOCKET_T _so = ::socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
     if ( SOCKET_NOT_VALIDATE(_so) ) {
@@ -419,9 +419,13 @@ SOCKET_T sl_udp_socket_init()
     // Bind to 0, so we can get the port number by getsockname
     struct sockaddr_in _usin = {};
     _usin.sin_family = AF_INET;
-    _usin.sin_addr.s_addr = htonl(INADDR_ANY);
-    _usin.sin_port = 0;
-    bind(_so, (struct sockaddr *)&_usin, sizeof(_usin));
+    _usin.sin_addr.s_addr = bind_addr.ipaddress;
+    _usin.sin_port = htons(bind_addr.port_number);
+    if ( -1 == ::bind(_so, (struct sockaddr *)&_usin, sizeof(_usin)) ) {
+        lerror << "failed to create a udp socket and bind to " << bind_addr << lend;
+        SL_NETWORK_CLOSESOCK(_so);
+        return INVALIDATE_SOCKET;
+    }
 
     // Try to set the udp socket as nonblocking
     unsigned long _u = 1;
@@ -529,14 +533,9 @@ bool sl_udp_socket_read(SOCKET_T uso, struct sockaddr_in addr, string& buffer, s
     return true;
 }
 
-bool sl_udp_socket_listen(SOCKET_T uso, const sl_peerinfo& bind_port, sl_socket_event_handler accept_callback)
+bool sl_udp_socket_listen(SOCKET_T uso, sl_socket_event_handler accept_callback)
 {
     if ( SOCKET_NOT_VALIDATE(uso) ) return false;
-    struct sockaddr_in _sock_addr;
-    memset((char *)&_sock_addr, 0, sizeof(_sock_addr));
-    _sock_addr.sin_family = AF_INET;
-    _sock_addr.sin_port = htons(bind_port.port_number);
-    _sock_addr.sin_addr.s_addr = bind_port.ipaddress;
 
     sl_events::server().update_handler(uso, SL_EVENT_ACCEPT, [accept_callback](sl_event e) {
         if ( e.event != SL_EVENT_DATA ) {
@@ -547,11 +546,9 @@ bool sl_udp_socket_listen(SOCKET_T uso, const sl_peerinfo& bind_port, sl_socket_
         sl_poller::server().bind_udp_server(e.so);
     });
 
-    if ( ::bind(uso, (struct sockaddr *)&_sock_addr, sizeof(_sock_addr)) == -1 ) {
-        lerror << "failed to listen on udp " << bind_port << ": " << ::strerror( errno ) << lend;
-        return false;
-    }
-    linfo << "start to listening udp on " << bind_port << lend;
+    uint32_t _port;
+    network_sock_info_from_socket(uso, _port);
+    linfo << "start to listening udp on " << _port << lend;
     sl_poller::server().bind_udp_server(uso);
     return true;
 }

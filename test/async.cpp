@@ -116,11 +116,11 @@ int main( int argc, char * argv[] )
         });
     }
 
-    SOCKET_T _dso = sl_udp_socket_init();
+    SOCKET_T _dso = sl_udp_socket_init(sl_peerinfo(INADDR_ANY, 2000));
     if ( SOCKET_NOT_VALIDATE(_dso) ) {
         lerror << "failed to init a socket for udp listening" << lend;
     } else {
-        sl_udp_socket_listen(_dso, sl_peerinfo(INADDR_ANY, 2000), [&](sl_event e) {
+        sl_udp_socket_listen(_dso, [&](sl_event e) {
             string _dnspkg;
             sl_udp_socket_read(e.so, e.address, _dnspkg);
             string _domain;
@@ -141,11 +141,11 @@ int main( int argc, char * argv[] )
         });
     }
 
-    SOCKET_T _dsso = sl_udp_socket_init();
+    SOCKET_T _dsso = sl_udp_socket_init(sl_peerinfo(INADDR_ANY, 2001));
     if ( SOCKET_NOT_VALIDATE(_dsso) ) {
         lerror << "failed to init a socket for proxy udp dns listening" << lend;
     } else {
-        sl_udp_socket_listen(_dsso, sl_peerinfo(INADDR_ANY, 2001), [&](sl_event e) {
+        sl_udp_socket_listen(_dsso, [&](sl_event e) {
             string _dnspkg;
             sl_udp_socket_read(e.so, e.address, _dnspkg);
             string _domain;
