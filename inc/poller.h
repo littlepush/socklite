@@ -86,8 +86,8 @@ public:
 	~sl_poller();
         
 	// Bind the server side socket
-	void bind_tcp_server( SOCKET_T so );
-	void bind_udp_server( SOCKET_T so );
+	bool bind_tcp_server( SOCKET_T so );
+	bool bind_udp_server( SOCKET_T so );
 
 	// Try to fetch new events(Only return SL_EVENT_DEFAULT)
 	size_t fetch_events( earray &events,  unsigned int timedout = 1000 );

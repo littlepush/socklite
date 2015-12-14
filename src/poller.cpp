@@ -49,43 +49,65 @@ sl_poller::~sl_poller() {
 	m_events = NULL;
 }
 
-void sl_poller::bind_tcp_server( SOCKET_T so ) {
+bool sl_poller::bind_tcp_server( SOCKET_T so ) {
+#if SL_TARGET_LINUX
+	auto _tit = m_tcp_svr_map.find(so);
+	bool _is_new_bind = (_tit == end(m_tcp_svr_map));
+#endif
 	m_tcp_svr_map[so] = true;
-	unsigned long _u = 1;
-	SL_NETWORK_IOCTL_CALL(so, FIONBIO, &_u);
+	int _retval = 0;
 #if SL_TARGET_LINUX
 	struct epoll_event _e;
 	_e.data.fd = so;
 	_e.events = EPOLLIN | EPOLLET;
-	epoll_ctl( m_fd, EPOLL_CTL_ADD, so, &_e );
+	_retval = epoll_ctl( m_fd, EPOLL_CTL_ADD, so, &_e );
 #elif SL_TARGET_MAC
 	struct kevent _e;
 	EV_SET(&_e, so, EVFILT_READ, EV_ADD, 0, 0, NULL);
-	kevent(m_fd, &_e, 1, NULL, 0, NULL);
+	_retval = kevent(m_fd, &_e, 1, NULL, 0, NULL);
 #endif
+	if ( _retval == -1 ) {
+		lerror << "failed to bind and monitor the tcp server socket: " << ::strerror(errno) << lend;
+#if SL_TARGET_LINUX
+		if ( _is_new_bind ) {
+			m_tcp_svr_map.erase(so);
+		}
+#endif
+	}
+	return (_retval != -1);
 }
 
-void sl_poller::bind_udp_server( SOCKET_T so ) {
+bool sl_poller::bind_udp_server( SOCKET_T so ) {
 #if SL_TARGET_LINUX
 	auto _uit = m_udp_svr_map.find(so);
 	bool _is_new_bind = (_uit == end(m_udp_svr_map));
 #endif
 	// Reset the flag
 	m_udp_svr_map[so] = true;
+	int _retval = 0;
 #if SL_TARGET_LINUX
 	struct epoll_event _e;
 	_e.data.fd = so;
 	_e.events = EPOLLIN | EPOLLET | EPOLLONESHOT;
 	if ( _is_new_bind ) {
-		epoll_ctl( m_fd, EPOLL_CTL_ADD, so, &_e );
+		_retval = epoll_ctl( m_fd, EPOLL_CTL_ADD, so, &_e );
 	} else {
-		epoll_ctl( m_fd, EPOLL_CTL_MOD, so, &_e );
+		_retval = epoll_ctl( m_fd, EPOLL_CTL_MOD, so, &_e );
 	}
 #elif SL_TARGET_MAC
 	struct kevent _e;
 	EV_SET(&_e, so, EVFILT_READ, EV_ADD | EV_ONESHOT, 0, 0, NULL);
-	kevent(m_fd, &_e, 1, NULL, 0, NULL);
+	_retval = kevent(m_fd, &_e, 1, NULL, 0, NULL);
 #endif
+	if ( _retval == -1 ) {
+		lerror << "failed to bind and monitor the udp server socket: " << ::strerror(errno) << lend;
+#if SL_TARGET_LINUX
+		if ( _is_new_bind ) {
+			m_udp_svr_map.erase(so);
+		}
+#endif
+	}
+	return (_retval != -1);
 }
 
 size_t sl_poller::fetch_events( sl_poller::earray &events, unsigned int timedout ) {

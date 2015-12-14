@@ -231,7 +231,7 @@ bool sl_tcp_socket_connect(SOCKET_T tso, const sl_peerinfo& socks5, const string
                         e.event = SL_EVENT_FAILED; callback(e); return;
                     }
                     e.event = SL_EVENT_CONNECT; callback(e);
-                });
+                }) ? void() : [&e, callback]() { e.event = SL_EVENT_FAILED; callback(e); }();
             }) ? void() : [&e, callback](){ e.event = SL_EVENT_FAILED; callback(e); }();
         }));
     } else {
@@ -392,7 +392,9 @@ bool sl_tcp_socket_listen(SOCKET_T tso, const sl_peerinfo& bind_port, sl_socket_
         return false;
     }
     linfo << "start to listening tcp on " << bind_port << lend;
-    sl_poller::server().bind_tcp_server(tso);
+    if ( !sl_poller::server().bind_tcp_server(tso) ) {
+        return false;
+    }
     return true;
 }
 sl_peerinfo sl_tcp_get_original_dest(SOCKET_T tso)
@@ -543,7 +545,13 @@ bool sl_udp_socket_listen(SOCKET_T uso, sl_socket_event_handler accept_callback)
             return;
         }
         accept_callback(e);
-        sl_poller::server().bind_udp_server(e.so);
+        bool _ret = false;
+        do{
+            _ret = sl_poller::server().bind_udp_server(e.so);
+            if ( _ret == false ) {
+                usleep(1000000);
+            }
+        } while( _ret == false );
     });
 
     uint32_t _port;
