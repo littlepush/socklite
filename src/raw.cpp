@@ -280,7 +280,7 @@ bool sl_tcp_socket_send(SOCKET_T tso, const string &pkg)
         _lastSent = ::send( tso, _data, 
             _length, 0 | SL_NETWORK_NOSIGNAL );
         if( _lastSent <= 0 ) {
-            if ( ENOBUFS == errno ) {
+            if ( ENOBUFS == errno || EAGAIN == errno ) {
                 // try to increase the write buffer and then retry
                 uint32_t _wmem = 0, _lmem = 0;
                 getsockopt(tso, SOL_SOCKET, SO_SNDBUF, (char *)&_wmem, &_lmem);
@@ -288,7 +288,7 @@ bool sl_tcp_socket_send(SOCKET_T tso, const string &pkg)
                 setsockopt(tso, SOL_SOCKET, SO_SNDBUF, (char *)&_wmem, _lmem);
             } else {
                 // Failed to send
-                lerror << "failed to send data on tcp socket: " << tso << ", " << ::strerror(errno) << lend;
+                lerror << "failed to send data on tcp socket: " << tso << ", err(" << errno << "): " << ::strerror(errno) << lend;
                 return false;
             }
         } else {
