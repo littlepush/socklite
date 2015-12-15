@@ -357,7 +357,14 @@ bool sl_tcp_socket_read(SOCKET_T tso, string& buffer, size_t max_buffer_size)
                 return true;
             } else {
                 // The buffer is full, try to double the buffer and try again
-                max_buffer_size *= 2;
+                if ( max_buffer_size * 2 <= buffer.max_size() ) {
+                    max_buffer_size *= 2;
+                } else if ( max_buffer_size < buffer.max_size() ) {
+                    max_buffer_size = buffer.max_size();
+                } else {
+                    return true;    // direct return, wait for next read.
+                }
+                // Resize the buffer and try to read again
                 _leftspace = max_buffer_size - _received;
                 buffer.resize(max_buffer_size);
             }
