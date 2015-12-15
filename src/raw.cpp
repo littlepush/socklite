@@ -280,12 +280,21 @@ bool sl_tcp_socket_send(SOCKET_T tso, const string &pkg)
         _lastSent = ::send( tso, _data, 
             _length, 0 | SL_NETWORK_NOSIGNAL );
         if( _lastSent <= 0 ) {
-            // Failed to send
-            lerror << "failed to send data on tcp socket: " << tso << ", " << ::strerror(errno) << lend;
-            return false;
+            if ( ENOBUFS == errno ) {
+                // try to increase the write buffer and then retry
+                uint32_t _wmem = 0, _lmem = 0;
+                getsockopt(tso, SOL_SOCKET, SO_SNDBUF, (char *)&_wmem, &_lmem);
+                _wmem *= 2; // double the buffer
+                setsockopt(tso, SOL_SOCKET, SO_SNDBUF, (char *)&_wmem, _lmem);
+            } else {
+                // Failed to send
+                lerror << "failed to send data on tcp socket: " << tso << ", " << ::strerror(errno) << lend;
+                return false;
+            }
+        } else {
+            _data += _lastSent;
+            _length -= _lastSent;
         }
-        _data += _lastSent;
-        _length -= _lastSent;
     }
     return true;
 }
@@ -316,13 +325,21 @@ bool sl_tcp_socket_read(SOCKET_T tso, string& buffer, size_t max_buffer_size)
     // Socket must be nonblocking
     buffer.clear();
     buffer.resize(max_buffer_size);
+    size_t _received = 0;
+    size_t _leftspace = max_buffer_size;
+
     do {
-        int _retCode = ::recv(tso, &buffer[0], max_buffer_size, 0 );
+        int _retCode = ::recv(tso, &buffer[0] + _received, _leftspace, 0 );
         if ( _retCode < 0 ) {
             int _error = 0, _len = sizeof(int);
             getsockopt( tso, SOL_SOCKET, SO_ERROR,
                     (char *)&_error, (socklen_t *)&_len);
             if ( _error == EINTR ) continue;    // signal 7, retry
+            if ( _error == EAGAIN ) {
+                // No more data on a non-blocking socket
+                buffer.resize(_received);
+                return true;
+            }
             // Other error
             buffer.resize(0);
             lerror << "failed to receive data on tcp socket: " << tso << ", " << ::strerror( _error ) << lend;
@@ -332,8 +349,18 @@ bool sl_tcp_socket_read(SOCKET_T tso, string& buffer, size_t max_buffer_size)
             buffer.resize(0);
             return false;
         } else {
-            buffer.resize(_retCode);
-            return true;
+            _received += _retCode;
+            _leftspace -= _retCode;
+            if ( _leftspace > 0 ) {
+                // Unfull
+                buffer.resize(_retCode);
+                return true;
+            } else {
+                // The buffer is full, try to double the buffer and try again
+                max_buffer_size *= 2;
+                _leftspace = max_buffer_size - _received;
+                buffer.resize(max_buffer_size);
+            }
         }
     } while ( true );
     return true;
