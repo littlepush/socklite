@@ -123,7 +123,8 @@ namespace cpputility {
                     lock_guard<mutex> _(info_mutex_);
                     if ( info_map_.size() == 0 ) return;
                 }
-                usleep(1000);   // wait for 1ms
+                //usleep(1000);   // wait for 1ms
+                usleep(50);
             } while ( true );
         }
         // join specified thread

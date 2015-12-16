@@ -164,10 +164,13 @@ void sl_events::_internal_worker()
             this->update_handler(_local_event.so, _e, NULL);
         }
         sl_socket_event_handler _seh = (&_hs.on_accept)[SL_MACRO_LAST_1_INDEX(_e)];
-        if ( !_seh ) {
-            lwarning << "No handler bind for event: " << 
-                _e << " on socket " << _s << lend;
-        } else {
+        // if ( !_seh ) {
+        //     lnotice << "No handler bind for event: " << 
+        //         _e << " on socket " << _s << lend;
+        // } else {
+        //     _seh(_local_event);
+        // }
+        if ( _seh ) {
             _seh(_local_event);
         }
     }
@@ -237,25 +240,29 @@ void sl_events::run(uint32_t timepiece, sl_runloop_callback cb)
 
 void sl_events::stop_run()
 {
-    do {
-        lock_guard<mutex> _(running_lock_);
-        if ( is_running_ == false ) return;
-    } while ( false );
+    // do {
+    //     lock_guard<mutex> _(running_lock_);
+    //     if ( is_running_ == false ) return;
+    // } while ( false );
 
-    if ( runloop_thread_->joinable() )  {
+    if ( runloop_thread_ != NULL && runloop_thread_->joinable() )  {
         safe_join_thread(runloop_thread_->get_id());
         runloop_thread_->join();
     }
-    delete runloop_thread_;
-    runloop_thread_ = NULL;
+    if ( runloop_thread_ != NULL ) {
+        delete runloop_thread_;
+        runloop_thread_ = NULL;
+    }
 
     // Close the thread pool manager
-    if ( thread_pool_manager_->joinable() ) {
+    if ( thread_pool_manager_ != NULL && thread_pool_manager_->joinable() ) {
         safe_join_thread(thread_pool_manager_->get_id());
         thread_pool_manager_->join();
     }
-    delete thread_pool_manager_;
-    thread_pool_manager_ = NULL;
+    if ( thread_pool_manager_ != NULL ) {
+        delete thread_pool_manager_;
+        thread_pool_manager_ = NULL;
+    }
 
     // Close all worker in thread pool
     while ( thread_pool_.size() > 0 ) {

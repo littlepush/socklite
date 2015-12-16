@@ -320,20 +320,14 @@ void _sl_tcp_socket_on_write(sl_event e) {
         _sswpkg = _wi.package_queue->front();
     } while( false );
 
-    uint32_t _wmem = 4096, _lmem = 0;
-    if ( -1 == getsockopt(e.so, SOL_SOCKET, SO_SNDBUF, (char *)&_wmem, &_lmem) ) {
-        lerror << "failed to get the socket send buf: " << ::strerror(errno) << lend;
-        if ( _sswpkg->callback ) _sswpkg->callback(e);
-        return;
-    }
-
-    ldebug << "will send data(l:" << _sswpkg->package.size() << ") to socket " << e.so << ", write mem: " << _wmem << lend;
+    //ldebug << "will send data(l:" << _sswpkg->package.size() << ") to socket " << e.so << ", write mem: " << _wmem << lend;
 
     while ( _sswpkg->sent_size < _sswpkg->package.size() ) {
-        int _retval = ::send(e.so, _sswpkg->package.c_str() + _sswpkg->sent_size, 
-            min((size_t)_wmem, (_sswpkg->package.size() - _sswpkg->sent_size)), 
+        int _retval = ::send(e.so, 
+            _sswpkg->package.c_str() + _sswpkg->sent_size, 
+            (_sswpkg->package.size() - _sswpkg->sent_size), 
             0 | SL_NETWORK_NOSIGNAL);
-        ldebug << "send return value: " << _retval << lend;
+        //ldebug << "send return value: " << _retval << lend;
         if ( _retval < 0 ) {
             if ( ENOBUFS == errno || EAGAIN == errno || EWOULDBLOCK == errno ) {
                 // No buf
@@ -456,18 +450,15 @@ bool sl_tcp_socket_read(SOCKET_T tso, string& buffer, size_t max_buffer_size)
     do {
         int _retCode = ::recv(tso, &buffer[0] + _received, _leftspace, 0 );
         if ( _retCode < 0 ) {
-            int _error = 0, _len = sizeof(int);
-            getsockopt( tso, SOL_SOCKET, SO_ERROR,
-                    (char *)&_error, (socklen_t *)&_len);
-            if ( _error == EINTR ) continue;    // signal 7, retry
-            if ( _error == EAGAIN ) {
+            if ( errno == EINTR ) continue;    // signal 7, retry
+            if ( errno == EAGAIN || errno == EWOULDBLOCK ) {
                 // No more data on a non-blocking socket
                 buffer.resize(_received);
                 return true;
             }
             // Other error
             buffer.resize(0);
-            lerror << "failed to receive data on tcp socket: " << tso << ", " << ::strerror( _error ) << lend;
+            lerror << "failed to receive data on tcp socket: " << tso << ", " << ::strerror( errno ) << lend;
             return false;
         } else if ( _retCode == 0 ) {
             // Peer Close
