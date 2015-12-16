@@ -39,6 +39,9 @@ typedef std::function<void(const vector<sl_ip> &)>      async_dns_handler;
 // Try to get the dns result async
 void sl_async_gethostname(const string& host, async_dns_handler fp);
 
+// If the library should close the socket automatically on failed event.
+void sl_set_auto_close_on_failed(bool auto_close = true);
+
 // Close the socket and release the handler set
 void sl_socket_close(SOCKET_T so);
 
@@ -48,7 +51,7 @@ SOCKET_T sl_tcp_socket_init();
 bool sl_tcp_socket_connect(SOCKET_T tso, const sl_peerinfo& peer, sl_socket_event_handler callback);
 // Async connect to the host via a socks5 proxy
 bool sl_tcp_socket_connect(SOCKET_T tso, const sl_peerinfo& socks5, const string& host, uint16_t port, sl_socket_event_handler callback);
-bool sl_tcp_socket_send(SOCKET_T tso, const string &pkg);
+bool sl_tcp_socket_send(SOCKET_T tso, const string &pkg, sl_socket_event_handler callback = NULL);
 bool sl_tcp_socket_monitor(SOCKET_T tso, sl_socket_event_handler callback, bool new_incoming = false);
 bool sl_tcp_socket_read(SOCKET_T tso, string& buffer, size_t max_buffer_size = 4098);
 bool sl_tcp_socket_listen(SOCKET_T tso, const sl_peerinfo& bind_port, sl_socket_event_handler accept_callback);

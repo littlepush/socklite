@@ -28,12 +28,45 @@
 #include <linux/netfilter_ipv4.h>
 #endif
 
+#include <queue>
+
+static bool __g_autoclose = false;
+
+typedef struct sl_write_package {
+    string                          package;
+    size_t                          sent_size;
+    sl_socket_event_handler         callback;
+} sl_write_package;
+
+typedef shared_ptr<sl_write_package>                sl_shared_write_pakcage;
+
+typedef struct sl_write_info {
+    shared_ptr< mutex >                             locker;
+    shared_ptr< queue<sl_shared_write_pakcage> >    package_queue;
+} sl_write_info;
+
+typedef map< SOCKET_T, sl_write_info >              sl_write_map_t;
+
+mutex               _g_so_write_mutex;
+sl_write_map_t      _g_so_write_map;
+
+// If the library should close the socket automatically on failed event.
+void sl_set_auto_close_on_failed(bool auto_close)
+{
+    __g_autoclose = auto_close;
+}
+
 void sl_socket_close(SOCKET_T so)
 {
     if ( SOCKET_NOT_VALIDATE(so) ) return;
     //sl_event_unbind_handler(so);
     ldebug << "the socket " << so << " will be unbind and closed" << lend;
     sl_events::server().unbind(so);
+    do {
+        lock_guard<mutex> _(_g_so_write_mutex);
+        _g_so_write_map.erase(so);
+    } while(false);
+
     close(so);
 }
 
@@ -72,7 +105,13 @@ SOCKET_T sl_tcp_socket_init()
         return INVALIDATE_SOCKET;
     }
 
-    sl_events::server().bind(_so, sl_event_empty_handler());
+    sl_events::server().bind(_so, sl_events::empty_handler());
+    // Add A Write Buffer
+    sl_write_info _wi = { make_shared<mutex>(), make_shared< queue<sl_shared_write_pakcage> >() };
+    do {
+        lock_guard<mutex> _(_g_so_write_mutex);
+        _g_so_write_map[_so] = _wi;
+    } while(false);
     return _so;
 }
 bool sl_tcp_socket_connect(SOCKET_T tso, const sl_peerinfo& peer, sl_socket_event_handler callback)
@@ -107,7 +146,7 @@ bool sl_tcp_socket_connect(SOCKET_T tso, const sl_peerinfo& peer, sl_socket_even
             return false;
         } else {
             // Monitor the socket, the poller will invoke on_connect when the socket is connected or failed.
-            ldebug << "monitor tcp socket " << tso << " for connecting" << lend;
+            //ldebug << "monitor tcp socket " << tso << " for connecting" << lend;
             if ( !sl_poller::server().monitor_socket(tso, true, SL_EVENT_CONNECT) ) {
                 //sl_events::server().add_tcpevent(tso, SL_EVENT_FAILED);
                 return false;
@@ -122,10 +161,10 @@ bool sl_tcp_socket_connect(SOCKET_T tso, const sl_peerinfo& peer, sl_socket_even
 bool sl_tcp_socket_connect(SOCKET_T tso, const vector<sl_ip> &iplist, uint16_t port, uint32_t index, sl_socket_event_handler callback) {
     bool _retval = true;
     do {
-        ldebug << "iplist count: " << iplist.size() << ", current index: " << index << lend;
+        //ldebug << "iplist count: " << iplist.size() << ", current index: " << index << lend;
         if ( iplist.size() <= index ) return false;
         sl_peerinfo _pi((const string &)iplist[index], port);
-        ldebug << "try to connect to " << _pi << ", this is the " << index << " item in iplist" << lend;
+        //ldebug << "try to connect to " << _pi << ", this is the " << index << " item in iplist" << lend;
         _retval = sl_tcp_socket_connect(tso, sl_peerinfo((const string &)iplist[index], port), [iplist, port, index, callback](sl_event e) {
             if ( e.event == SL_EVENT_FAILED ) {
                 // go to next
@@ -145,7 +184,7 @@ bool sl_tcp_socket_connect(SOCKET_T tso, const vector<sl_ip> &iplist, uint16_t p
 bool sl_tcp_socket_connect(SOCKET_T tso, const sl_peerinfo& socks5, const string& host, uint16_t port, sl_socket_event_handler callback)
 {
     if ( socks5 ) {
-        ldebug << "try to connect via a socks5 proxy: " << socks5 << lend;
+        //ldebug << "try to connect via a socks5 proxy: " << socks5 << lend;
         return ( sl_tcp_socket_connect(tso, socks5, [socks5, host, port, callback](sl_event e){
             if ( e.event == SL_EVENT_FAILED ) {
                 lerror << "the socks5 proxy cannot be connected" << socks5 << lend;
@@ -235,10 +274,10 @@ bool sl_tcp_socket_connect(SOCKET_T tso, const sl_peerinfo& socks5, const string
             }) ? void() : [&e, callback](){ e.event = SL_EVENT_FAILED; callback(e); }();
         }));
     } else {
-        ldebug << "the socks5 is empty, try to connect to host(" << host << ") directly" << lend;
+        //ldebug << "the socks5 is empty, try to connect to host(" << host << ") directly" << lend;
         sl_ip _host_ip(host);
         if ( (uint32_t)_host_ip == (uint32_t)-1 ) {
-            ldebug << "the host(" << host << ") is not an IP address, try to resolve first" << lend;
+            //ldebug << "the host(" << host << ") is not an IP address, try to resolve first" << lend;
             // This is a domain
             sl_async_gethostname(host, [tso, host, port, callback](const vector<sl_ip> &iplist){
                 if ( iplist.size() == 0 || ((uint32_t)iplist[0] == (uint32_t)-1) ) {
@@ -249,7 +288,7 @@ bool sl_tcp_socket_connect(SOCKET_T tso, const sl_peerinfo& socks5, const string
                     _e.event = SL_EVENT_FAILED;
                     callback(_e);
                 } else {
-                    ldebug << "resolvd the host " << host << ", trying to connect via tcp socket" << lend;
+                    //ldebug << "resolvd the host " << host << ", trying to connect via tcp socket" << lend;
                     if ( !sl_tcp_socket_connect(tso, iplist, port, 0, callback) ) {
                         lerror << "failed to connect to the host(" << host << ")" << lend;
                         sl_event _e;
@@ -264,38 +303,110 @@ bool sl_tcp_socket_connect(SOCKET_T tso, const sl_peerinfo& socks5, const string
         return sl_tcp_socket_connect(tso, sl_peerinfo(host, port), callback);
     }
 }
-bool sl_tcp_socket_send(SOCKET_T tso, const string &pkg)
+
+void _sl_tcp_socket_on_write(sl_event e) {
+    sl_write_info _wi;
+    do {
+        lock_guard<mutex> _(_g_so_write_mutex);
+        auto _wiit = _g_so_write_map.find(e.so);
+        if ( _wiit == _g_so_write_map.end() ) return;
+        _wi = _wiit->second;
+    } while( false );
+
+    sl_shared_write_pakcage _sswpkg;
+    do {
+        lock_guard<mutex> _(*_wi.locker);
+        assert(_wi.package_queue->size() > 0);
+        _sswpkg = _wi.package_queue->front();
+    } while( false );
+
+    uint32_t _wmem = 4096, _lmem = 0;
+    if ( -1 == getsockopt(e.so, SOL_SOCKET, SO_SNDBUF, (char *)&_wmem, &_lmem) ) {
+        lerror << "failed to get the socket send buf: " << ::strerror(errno) << lend;
+        if ( _sswpkg->callback ) _sswpkg->callback(e);
+        return;
+    }
+
+    ldebug << "will send data(l:" << _sswpkg->package.size() << ") to socket " << e.so << ", write mem: " << _wmem << lend;
+
+    while ( _sswpkg->sent_size < _sswpkg->package.size() ) {
+        int _retval = ::send(e.so, _sswpkg->package.c_str() + _sswpkg->sent_size, 
+            min((size_t)_wmem, (_sswpkg->package.size() - _sswpkg->sent_size)), 
+            0 | SL_NETWORK_NOSIGNAL);
+        ldebug << "send return value: " << _retval << lend;
+        if ( _retval < 0 ) {
+            if ( ENOBUFS == errno || EAGAIN == errno || EWOULDBLOCK == errno ) {
+                // No buf
+                break;
+            } else {
+                lerror
+                    << "failed to send data on tcp socket: " << e.so 
+                    << ", err(" << errno << "): " << ::strerror(errno) << lend;
+                e.event = SL_EVENT_FAILED;
+                if ( _sswpkg->callback ) _sswpkg->callback(e);
+                return;
+            }
+        } else if ( _retval == 0 ) {
+            // No buf? sent 0
+            break;
+        } else {
+            _sswpkg->sent_size += _retval;
+        }
+    }
+    do {
+        lock_guard<mutex> _(*_wi.locker);
+        if ( _sswpkg->sent_size == _sswpkg->package.size() ) {
+            _wi.package_queue->pop();
+        }
+        if ( _wi.package_queue->size() == 0 ) break;
+        // Remonitor
+        sl_events::server().update_handler(e.so, SL_EVENT_WRITE, _sl_tcp_socket_on_write);
+
+        int _eid = SL_EVENT_WRITE;
+        if ( sl_events::server().has_handler(e.so, SL_EVENT_READ) ) {
+            _eid |= SL_EVENT_READ;
+        }
+        sl_poller::server().monitor_socket(e.so, true, (SL_EVENT_ID)_eid);
+    } while ( false );
+    if ( _sswpkg->callback ) _sswpkg->callback(e);
+}
+
+bool sl_tcp_socket_send(SOCKET_T tso, const string &pkg, sl_socket_event_handler callback)
 {
     if ( pkg.size() == 0 ) return false;
     if ( SOCKET_NOT_VALIDATE(tso) ) return false;
 
-    ldebug << "will write data(l:" << pkg.size() << ") to tcp socket: " << tso << lend;
-    int _lastSent = 0;
+    //_g_so_write_map
+    sl_write_info _wi;
+    do {
+        lock_guard<mutex> _(_g_so_write_mutex);
+        auto _wiit = _g_so_write_map.find(tso);
+        if ( _wiit == _g_so_write_map.end() ) return false;
+        _wi = _wiit->second;
+    } while( false );
 
-    unsigned int _length = pkg.size();
-    const char *_data = pkg.c_str();
+    // Create the new write package
+    shared_ptr<sl_write_package> _wpkg = make_shared<sl_write_package>();
+    //_wpkg->package.swap(pkg);
+    _wpkg->package = move(pkg);
+    _wpkg->sent_size = 0;
+    _wpkg->callback = move(callback);
 
-    while ( _length > 0 )
-    {
-        _lastSent = ::send( tso, _data, 
-            _length, 0 | SL_NETWORK_NOSIGNAL );
-        if( _lastSent <= 0 ) {
-            if ( ENOBUFS == errno || EAGAIN == errno ) {
-                // try to increase the write buffer and then retry
-                uint32_t _wmem = 0, _lmem = 0;
-                getsockopt(tso, SOL_SOCKET, SO_SNDBUF, (char *)&_wmem, &_lmem);
-                _wmem *= 2; // double the buffer
-                setsockopt(tso, SOL_SOCKET, SO_SNDBUF, (char *)&_wmem, _lmem);
-            } else {
-                // Failed to send
-                lerror << "failed to send data on tcp socket: " << tso << ", err(" << errno << "): " << ::strerror(errno) << lend;
-                return false;
-            }
-        } else {
-            _data += _lastSent;
-            _length -= _lastSent;
-        }
+    // Lock the write queue
+    lock_guard<mutex> _(*_wi.locker);
+    _wi.package_queue->push(_wpkg);
+
+    // Just push the package to the end of the queue
+    if ( _wi.package_queue->size() > 1 ) return true;
+
+    sl_events::server().update_handler(tso, SL_EVENT_WRITE, _sl_tcp_socket_on_write);
+
+    int _eid = SL_EVENT_WRITE;
+    if ( sl_events::server().has_handler(tso, SL_EVENT_READ) ) {
+        _eid |= SL_EVENT_READ;
     }
+    sl_poller::server().monitor_socket(tso, true, (SL_EVENT_ID)_eid);
+
     return true;
 }
 bool sl_tcp_socket_monitor(SOCKET_T tso, sl_socket_event_handler callback, bool new_incoming)
@@ -316,7 +427,21 @@ bool sl_tcp_socket_monitor(SOCKET_T tso, sl_socket_event_handler callback, bool 
         callback(e);
     });
 
-    return sl_poller::server().monitor_socket(tso, true, SL_EVENT_DEFAULT, !new_incoming);
+    sl_write_info _wi;
+    do {
+        lock_guard<mutex> _(_g_so_write_mutex);
+        auto _wiit = _g_so_write_map.find(tso);
+        if ( _wiit == _g_so_write_map.end() ) return false;
+        _wi = _wiit->second;
+    } while( false );
+
+    lock_guard<mutex> _(*_wi.locker);
+    int _eid = SL_EVENT_DEFAULT;
+    if ( sl_events::server().has_handler(tso, SL_EVENT_WRITE) ) {
+        _eid |= SL_EVENT_WRITE;
+    }
+
+    return sl_poller::server().monitor_socket(tso, true, (SL_EVENT_ID)_eid, !new_incoming);
 }
 bool sl_tcp_socket_read(SOCKET_T tso, string& buffer, size_t max_buffer_size)
 {
@@ -347,6 +472,7 @@ bool sl_tcp_socket_read(SOCKET_T tso, string& buffer, size_t max_buffer_size)
         } else if ( _retCode == 0 ) {
             // Peer Close
             buffer.resize(0);
+            lerror << "the peer has close the socket, recv 0" << lend;
             return false;
         } else {
             _received += _retCode;
@@ -413,7 +539,14 @@ bool sl_tcp_socket_listen(SOCKET_T tso, const sl_peerinfo& bind_port, sl_socket_
             return;
         }
 
-        sl_events::server().bind(e.so, sl_event_empty_handler());
+        // Add A Write Buffer
+        sl_write_info _wi = { make_shared<mutex>(), make_shared< queue<sl_shared_write_pakcage> >() };
+        do {
+            lock_guard<mutex> _(_g_so_write_mutex);
+            _g_so_write_map[e.so] = _wi;
+        } while(false);
+
+        sl_events::server().bind(e.so, sl_events::empty_handler());
         accept_callback(e);
     });
 
@@ -469,7 +602,7 @@ SOCKET_T sl_udp_socket_init(const sl_peerinfo& bind_addr)
 
     // Bind the empty handler set
     //sl_event_bind_handler(_so, sl_event_empty_handler());
-    sl_events::server().bind(_so, sl_event_empty_handler());
+    sl_events::server().bind(_so, sl_events::empty_handler());
     return _so;
 }
 
@@ -512,7 +645,7 @@ bool sl_udp_socket_monitor(SOCKET_T uso, const sl_peerinfo& peer, sl_socket_even
 
     sl_events::server().update_handler(uso, SL_EVENT_READ, [peer, callback](sl_event e) {
         if ( e.event != SL_EVENT_READ ) return;
-        ldebug << "udp socket " << e.so << " did get read event callback, which means has incoming data" << lend;
+        //ldebug << "udp socket " << e.so << " did get read event callback, which means has incoming data" << lend;
         if ( peer ) {
             e.address.sin_family = AF_INET;
             e.address.sin_port = htons(peer.port_number);
@@ -532,7 +665,7 @@ bool sl_udp_socket_monitor(SOCKET_T uso, const sl_peerinfo& peer, sl_socket_even
         }
         callback(e);
     });
-    ldebug << "did update the handler for udp socket " << uso << " on SL_EVENT_READ(2) and SL_EVENT_FAILED(4)" << lend;
+    //ldebug << "did update the handler for udp socket " << uso << " on SL_EVENT_READ(2) and SL_EVENT_FAILED(4)" << lend;
     return sl_poller::server().monitor_socket(uso, true, SL_EVENT_DEFAULT);
 }
 bool sl_udp_socket_read(SOCKET_T uso, struct sockaddr_in addr, string& buffer, size_t max_buffer_size)
@@ -540,7 +673,7 @@ bool sl_udp_socket_read(SOCKET_T uso, struct sockaddr_in addr, string& buffer, s
     if ( SOCKET_NOT_VALIDATE(uso) ) return false;
 
     sl_peerinfo _pi(addr.sin_addr.s_addr, ntohs(addr.sin_port));
-    ldebug << "udp socket " << uso << " tring to read data from " << _pi << lend;
+    //ldebug << "udp socket " << uso << " tring to read data from " << _pi << lend;
     buffer.clear();
     buffer.resize(max_buffer_size);
 
@@ -617,7 +750,7 @@ void __sl_async_gethostnmae_udp(const string&& query_pkg, size_t use_index, asyn
     SOCKET_T _uso = sl_udp_socket_init();
     string _domain;
     dns_get_domain(query_pkg.c_str(), query_pkg.size(), _domain);
-    ldebug << "initialize a udp socket " << _uso << " to query domain: " << _domain << lend;
+    //ldebug << "initialize a udp socket " << _uso << " to query domain: " << _domain << lend;
     if ( !sl_udp_socket_send(_uso, query_pkg, _resolv_list[use_index]) ) {
         lerror << "failed to send dns query package to " << _resolv_list[use_index] << lend;
         // Failed to send( unable to access the server );
@@ -745,7 +878,7 @@ void sl_async_gethostname(const string& host, async_dns_handler fp)
                 ntohs(_res.nsaddr_list[i].sin_port)
                 );
             _resolv_list.push_back(_pi);
-            ldebug << "resolv get dns: " << _pi << lend;
+            //ldebug << "resolv get dns: " << _pi << lend;
         }
     }
     string _qpkg;

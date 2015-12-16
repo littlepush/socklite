@@ -43,14 +43,15 @@ typedef struct tag_sl_handler_set {
     sl_socket_event_handler         on_write;
 } sl_handler_set;
 
-// Create and return an empty handler set
-sl_handler_set sl_event_empty_handler();
-
 class sl_events
 {
+public:
+    // Return an empty handler set
+    static sl_handler_set empty_handler();
+    typedef map<SOCKET_T, sl_handler_set>   shsmap_t;       // SOCKET_HANDLER_SET_MAP_TYPE
 protected:
-    mutable mutex           events_lock_;
-    vector< sl_event >      pending_events_;
+    mutable mutex           handler_mutex_;
+    shsmap_t                event_map_;
 
     // Protected constructure
     sl_events();
@@ -60,9 +61,11 @@ protected:
     uint32_t                timepiece_;
     sl_runloop_callback     rl_callback_;
 
+    // Running status
     bool                    is_running_;
     thread *                runloop_thread_;
 
+    // Manager Thread Info
     event_pool<sl_event>    events_pool_;
     vector<thread*>         thread_pool_;
     thread *                thread_pool_manager_;
@@ -73,6 +76,8 @@ protected:
     void _internal_add_worker();
     void _internal_remove_worker();
     void _internal_worker();
+
+    sl_handler_set _find_handler(SOCKET_T so);
 public:
     ~sl_events();
     // return the singleton instance of sl_events
@@ -80,12 +85,10 @@ public:
 
     unsigned int pending_socket_count();
 
-    void bind( sl_socket *pso, sl_handler_set&& hset );
     void bind( SOCKET_T so, sl_handler_set&& hset );
-    void unbind( sl_socket *pso );
     void unbind( SOCKET_T so );
-    void update_handler(sl_socket *pso, SL_EVENT_ID eid, sl_socket_event_handler&& h);
     void update_handler( SOCKET_T so, SL_EVENT_ID eid, sl_socket_event_handler&& h);
+    bool has_handler(SOCKET_T so, SL_EVENT_ID eid);
 
     bool is_running() const;
     void run( uint32_t timepiece = 10, sl_runloop_callback cb = NULL );

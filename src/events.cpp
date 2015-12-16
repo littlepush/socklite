@@ -32,55 +32,11 @@ static const int __sl_bitorder[32] = {
 // Get the index of the last bit which is 1
 #define SL_MACRO_LAST_1_INDEX(x)     (__sl_bitorder[((unsigned int)(((x) & -(x)) * 0x04653ADFU)) >> 27])
 
-std::map<SOCKET_T, sl_handler_set> & _sl_event_map() {
-    static std::map<SOCKET_T, sl_handler_set> _g_emap;
-    return _g_emap;
-}
-
-mutex & _sl_event_mutex() {
-    static mutex _egm;
-    return _egm;
-}
-
-sl_handler_set sl_event_empty_handler()
-{
+sl_handler_set sl_events::empty_handler() {
     sl_handler_set _s;
     memset((void *)&_s, 0, sizeof(sl_handler_set));
     return _s;
 }
-
-// Bind the event handler set
-void sl_event_bind_handler(SOCKET_T so, sl_handler_set&& hset)
-{
-    lock_guard<mutex> _(_sl_event_mutex());
-    _sl_event_map()[so] = hset;
-}
-// Unbind the event handler set
-void sl_event_unbind_handler(SOCKET_T so)
-{
-    lock_guard<mutex> _(_sl_event_mutex());
-    _sl_event_map().erase(so);
-}
-// Search for the handler set
-sl_handler_set sl_event_find_handler(SOCKET_T so)
-{
-    lock_guard<mutex> _(_sl_event_mutex());
-    if ( _sl_event_map().find(so) == end(_sl_event_map()) ) {
-        return sl_event_empty_handler();
-    }
-    return _sl_event_map()[so];
-}
-// Update the handler for specifial event
-void sl_event_update_handler(SOCKET_T so, SL_EVENT_ID eid, sl_socket_event_handler&& h)
-{
-    if ( eid == 0 ) return;
-    if ( eid & 0xFFFFFFE0 ) return; // Invalidate event flag
-    lock_guard<mutex> _(_sl_event_mutex());
-    auto _hit = _sl_event_map().find(so);
-    if ( _hit == end(_sl_event_map()) ) return;
-    (&_hit->second.on_accept)[SL_MACRO_LAST_1_INDEX(eid)] = h;
-}
-
 // sl_events member functions
 sl_events::sl_events()
 : timepiece_(10), rl_callback_(NULL), is_running_(false)
@@ -128,10 +84,9 @@ void sl_events::_internal_start_runloop()
 
 void sl_events::_internal_runloop()
 {
-    ldebug << "internal runloop thread id " << this_thread::get_id() << lend;
     thread_agent _ta;
 
-    ldebug << "internal runloop started" << lend;
+    //ldebug << "internal runloop started" << lend;
     while ( this_thread_is_running() ) {
         //ldebug << "runloop is still running" << lend;
         sl_poller::earray _event_list;
@@ -144,19 +99,8 @@ void sl_events::_internal_runloop()
             _fp = rl_callback_;
         } while(false);
 
-        do {
-            lock_guard<mutex> _(events_lock_);
-            //ldebug << "copy the pending event list" << lend;
-            _event_list = move(pending_events_);
-        } while(false);
-
-        // Force the fetch method to return immediately if have some pending events
-        if ( _event_list.size() > 0 ) {
-            _tp = 0;
-        }
-
         //ldebug << "current pending events: " << _event_list.size() << lend;
-        size_t _ecount = sl_poller::server().fetch_events(_event_list, _tp) + _event_list.size();
+        size_t _ecount = sl_poller::server().fetch_events(_event_list, _tp);
         if ( _ecount != 0 ) {
             //ldebug << "fetch some events, will process them" << lend;
             for ( auto &e : _event_list ) {
@@ -212,11 +156,12 @@ void sl_events::_internal_worker()
                             (_local_event.so == _local_event.source) && 
                             (_local_event.socktype == IPPROTO_UDP)) ?
                             SL_EVENT_ACCEPT : _local_event.event;
-        ldebug << "processing socket " << _s << " for event " << _e << lend;
-        sl_handler_set _hs = sl_event_find_handler(_s);
+        //ldebug << "processing socket " << _s << " for event " << _e << lend;
+        sl_handler_set _hs = this->_find_handler(_s);
         // Remove current event handler
         if ( _e != SL_EVENT_ACCEPT ) {
-            sl_event_bind_handler(_local_event.so, move(sl_event_empty_handler()));
+            //this->bind(_local_event.so, move(sl_events::empty_handler()));
+            this->update_handler(_local_event.so, _e, NULL);
         }
         sl_socket_event_handler _seh = (&_hs.on_accept)[SL_MACRO_LAST_1_INDEX(_e)];
         if ( !_seh ) {
@@ -226,42 +171,53 @@ void sl_events::_internal_worker()
             _seh(_local_event);
         }
     }
+
+    linfo << "the worker " << this_thread::get_id() << " will exit" << lend;
 }
 
 unsigned int sl_events::pending_socket_count()
 {
-    lock_guard<mutex> _(events_lock_);
     return events_pool_.size();
 }
 
-void sl_events::bind(sl_socket *pso, sl_handler_set&& hset) {
-    if ( pso == NULL || SOCKET_NOT_VALIDATE(pso->m_socket) ) return;
-    sl_event_bind_handler(pso->m_socket, move(hset));
-}
-
-void sl_events::unbind( sl_socket *pso ) {
-    if ( pso == NULL || SOCKET_NOT_VALIDATE(pso->m_socket) ) return;
-    sl_event_unbind_handler(pso->m_socket);
-}
-void sl_events::update_handler(sl_socket *pso, SL_EVENT_ID eid, sl_socket_event_handler&& h)
-{
-    if ( pso == NULL || SOCKET_NOT_VALIDATE(pso->m_socket) ) return;
-    sl_event_update_handler(pso->m_socket, eid, move(h));
-}
 void sl_events::bind( SOCKET_T so, sl_handler_set&& hset )
 {
     if ( SOCKET_NOT_VALIDATE(so) ) return;
-    sl_event_bind_handler(so, move(hset));
+    lock_guard<mutex> _(handler_mutex_);
+    event_map_.emplace(so, move(hset));
 }
 void sl_events::unbind( SOCKET_T so )
 {
     if ( SOCKET_NOT_VALIDATE(so) ) return;
-    sl_event_unbind_handler(so);
+    lock_guard<mutex> _(handler_mutex_);
+    event_map_.erase(so);
 }
 void sl_events::update_handler( SOCKET_T so, SL_EVENT_ID eid, sl_socket_event_handler&& h)
 {
     if ( SOCKET_NOT_VALIDATE(so) ) return;
-    sl_event_update_handler(so, eid, move(h));
+    if ( eid == 0 ) return;
+    if ( eid & 0xFFFFFFE0 ) return; // Invalidate event flag
+    lock_guard<mutex> _(handler_mutex_);
+    auto _hit = event_map_.find(so);
+    if ( _hit == end(event_map_) ) return;
+    (&_hit->second.on_accept)[SL_MACRO_LAST_1_INDEX(eid)] = h;
+}
+bool sl_events::has_handler(SOCKET_T so, SL_EVENT_ID eid)
+{
+    if ( SOCKET_NOT_VALIDATE(so) ) return false;
+    if ( eid == 0 ) return false;
+    if ( eid & 0xFFFFFFE0 ) return false;
+    lock_guard<mutex> _(handler_mutex_);
+    auto _hit = event_map_.find(so);
+    if ( _hit == end(event_map_) ) return false;
+    sl_socket_event_handler _seh = (&_hit->second.on_accept)[SL_MACRO_LAST_1_INDEX(eid)];
+    return (bool)_seh;
+}
+sl_handler_set sl_events::_find_handler(SOCKET_T so) {
+    lock_guard<mutex> _(handler_mutex_);
+    auto _hit = event_map_.find(so);
+    if ( _hit == end(event_map_) ) return sl_events::empty_handler();
+    return _hit->second;
 }
 
 bool sl_events::is_running() const
@@ -309,29 +265,29 @@ void sl_events::stop_run()
 
 void sl_events::add_event(sl_event && e)
 {
-    lock_guard<mutex> _(events_lock_);
-    pending_events_.emplace_back(e);
+    //lock_guard<mutex> _(events_lock_);
+    events_pool_.notify_one(move(e));
 }
 void sl_events::add_tcpevent(SOCKET_T so, SL_EVENT_ID eid)
 {
-    lock_guard<mutex> _(events_lock_);
+    //lock_guard<mutex> _(events_lock_);
     sl_event _e;
     _e.so = so;
     _e.source = INVALIDATE_SOCKET;
     _e.event = eid;
     _e.socktype = IPPROTO_TCP;
-    pending_events_.emplace_back(move(_e));
+    events_pool_.notify_one(move(_e));
 }
 void sl_events::add_udpevent(SOCKET_T so, struct sockaddr_in addr, SL_EVENT_ID eid)
 {
-    lock_guard<mutex> _(events_lock_);
+    //lock_guard<mutex> _(events_lock_);
     sl_event _e;
     _e.so = so;
     _e.source = INVALIDATE_SOCKET;
     _e.event = eid;
     _e.socktype = IPPROTO_UDP;
     memcpy(&_e.address, &addr, sizeof(addr));
-    pending_events_.emplace_back(move(_e));
+    events_pool_.notify_one(move(_e));
 }
 
 // events.h

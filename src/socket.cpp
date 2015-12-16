@@ -316,6 +316,87 @@ ostream & operator << (ostream &os, const sl_peerinfo &peer) {
     return os;
 }
 
+/*
+IP Range, x.x.x.x/n
+*/
+void sl_iprange::parse_range_from_string(const string &format_string)
+{
+    // This is invalidate range
+    low_ = high_ = (uint32_t)-1;
+
+    size_t _slash_pos = format_string.find('/');
+    string _ipstr, _maskstr;
+    if ( _slash_pos == string::npos ) {
+        _ipstr = format_string;
+        _maskstr = "32";
+    } else {
+        _ipstr = format_string.substr(0, _slash_pos);
+        _maskstr = format_string.substr(_slash_pos + 1);
+    }
+
+    sl_ip _lowip(_ipstr);
+    if ( (uint32_t)_lowip == 0 ) return;  // Invalidate 
+
+    // Mask part
+    if ( _maskstr.size() > 2 ) {
+        sl_ip _highip(_maskstr);
+        if ( (uint32_t)_highip == 0 ) return;     // Invalidate Second Part
+        if ( _highip < _lowip ) return; // Invalidate order of the range
+        low_ = _lowip;
+        high_ = _highip;
+    } else {
+        uint32_t _mask = stoi(_maskstr, nullptr, 10);
+        if ( _mask > 32 ) return;
+        uint32_t _fmask = 0xFFFFFFFF;
+        _fmask <<= (32 - _mask);
+        low_ = ntohl(_lowip) & _fmask;
+        high_ = low_ | (~_fmask);
+        low_ = htonl(low_);
+        high_ = htonl(high_);
+    }
+}
+sl_iprange::sl_iprange() : low_((uint32_t)-1), high_((uint32_t)-1){ }
+sl_iprange::sl_iprange(const string & format_string) {
+    this->parse_range_from_string(format_string);
+}
+sl_iprange::sl_iprange(uint32_t low, uint32_t high) : low_(low), high_(high) {
+    if ( ntohl(high_) < ntohl(low_) ) {
+        low_ = high_ = (uint32_t)-1;
+    }
+}
+sl_iprange::sl_iprange(const sl_iprange &rhs) : low_(rhs.low_), high_(rhs.high_) { }
+sl_iprange & sl_iprange::operator = (const sl_iprange & rhs) {
+    low_ = rhs.low_;
+    high_ = rhs.high_;
+    return *this;
+}
+sl_iprange & sl_iprange::operator = (const string & format_string) {
+    this->parse_range_from_string(format_string);
+    return *this;
+}
+
+sl_iprange::operator const string() const {
+    string _lowstr = sl_ip(low_);
+    string _highstr = sl_ip(high_);
+    return _lowstr + " - " + _highstr;
+}
+bool sl_iprange::is_ip_in_range(const sl_ip& ip) {
+    uint32_t _ip = ntohl(ip);
+    uint32_t _low = ntohl(low_);
+    uint32_t _high = ntohl(high_);
+    return _ip >= _low && _ip <= _high;
+    //return ip >= sl_ip(low_) && ip <= sl_ip(high_);
+}
+sl_iprange::operator bool() const {
+    return low_ != (uint32_t)-1 && high_ != (uint32_t)-1;
+}
+
+// Output the ip range
+ostream & operator << (ostream &os, const sl_iprange &range) {
+    os << range.operator const string();
+    return os;
+}
+
 sl_socket::sl_socket(bool iswrapper) : m_iswrapper(iswrapper), m_is_listening(false), m_socket(INVALIDATE_SOCKET) { }
 
 // Virtual destructure

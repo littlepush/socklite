@@ -198,7 +198,7 @@ size_t sl_poller::fetch_events( sl_poller::earray &events, unsigned int timedout
 #elif SL_TARGET_MAC
 			_e.so = _pe->ident;
 #endif
-			ldebug << "get event for socket: " << _e.so << lend;
+			//ldebug << "get event for socket: " << _e.so << lend;
 			int _error = 0, _len = sizeof(int);
 			getsockopt( _e.so, SOL_SOCKET, SO_ERROR, 
 					(char *)&_error, (socklen_t *)&_len);
@@ -215,7 +215,7 @@ size_t sl_poller::fetch_events( sl_poller::earray &events, unsigned int timedout
 				_e.event = SL_EVENT_FAILED;
 			}
 
-			ldebug << "did get r/w event for socket: " << _e.so << ", event: " << _e.event << lend;
+			//ldebug << "did get r/w event for socket: " << _e.so << ", event: " << _e.event << lend;
 			
             int _type;
 			getsockopt( _e.so, SOL_SOCKET, SO_TYPE,

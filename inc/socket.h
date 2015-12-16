@@ -320,6 +320,32 @@ public:
 // Output the peer info
 ostream & operator << (ostream &os, const sl_peerinfo &peer);
 
+/*
+IP Range, x.x.x.x/n
+*/
+class sl_iprange {
+private:
+    uint32_t        low_;
+    uint32_t        high_;
+
+    void parse_range_from_string(const string &format_string);
+public:
+    sl_iprange();
+    sl_iprange(const string & format_string);
+    sl_iprange(uint32_t low, uint32_t high);
+    sl_iprange(const sl_iprange &rhs);
+
+    sl_iprange & operator = (const sl_iprange & rhs);
+    sl_iprange & operator = (const string & format_string);
+
+    operator bool() const;
+    operator const string() const;
+    bool is_ip_in_range(const sl_ip& ip);
+};
+
+// Output the ip range
+ostream & operator << (ostream &os, const sl_iprange &range);
+
 
 // The basic virtual socket class
 class sl_socket

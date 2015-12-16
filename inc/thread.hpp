@@ -81,6 +81,10 @@ namespace cpputility {
         __g_thread_mutex().unlock();
     }
 
+    inline void send_exit_signal() {
+        kill(getpid(), SIGQUIT);
+    }
+
     class thread_info
     {
         typedef map< thread::id, pair< shared_ptr<mutex>, shared_ptr<bool> > > info_map_t;
@@ -188,6 +192,9 @@ namespace cpputility {
             wait_for_exit_signal();
             if ( exit_callback_ ) exit_callback_() ;
             join_all_threads();
+        }
+        static void quit() {
+            send_exit_signal();
         }
     };
 

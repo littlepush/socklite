@@ -50,6 +50,10 @@ int main( int argc, char * argv[] )
         linfo << "the async server receive exit signal, ready to kill all working threads." << lend;
     });
 
+    sl_iprange _range("10.15.11.0/24");
+    lnotice << "IP 10.15.11.10 is in range(" << _range << "): " << _range.is_ip_in_range(sl_ip("10.15.11.10")) << lend;
+    lnotice << "IP 10.15.12.1 is in range(" << _range << "): " << _range.is_ip_in_range(sl_ip("10.15.12.1")) << lend;
+
     sl_async_gethostname("www.tmall.com", dump_iplist);
     sl_async_gethostname("www.baidu.com", dump_iplist);
     sl_async_gethostname("www.dianping.com", dump_iplist);
@@ -69,17 +73,27 @@ int main( int argc, char * argv[] )
             ldebug << "connected to " << _test_domain << lend;
             linfo << "we now connect to " << _test_domain << lnewl << "try to send basic http request" << lend;
             string _http_pkg = "GET / HTTP/1.1\r\n\r\n";
-            sl_tcp_socket_send(e.so, _http_pkg);
-            sl_tcp_socket_monitor(e.so, [=](sl_event e) {
+            sl_tcp_socket_send(e.so, _http_pkg, [](sl_event e) {
                 if ( e.event == SL_EVENT_FAILED ) {
-                    lerror << "no response get from the server." << lend;
+                    lerror << "failed to send data to www.baidu.com" << lend;
                     sl_socket_close(e.so);
                     return;
                 }
-                string _http_resp;
-                sl_tcp_socket_read(e.so, _http_resp, 1024000);
-                dump_hex(_http_resp);
-                sl_socket_close(e.so);
+                ldebug << "did write data to www.baidu.com, wait for response" << lend;
+                sl_tcp_socket_monitor(e.so, [=](sl_event e) {
+                    if ( e.event == SL_EVENT_FAILED ) {
+                        lerror << "no response get from the server." << lend;
+                        sl_socket_close(e.so);
+                        return;
+                    }
+                    ldebug << "did get the response, prepare for reading" << lend;
+                    string _http_resp;
+                    sl_tcp_socket_read(e.so, _http_resp, 1024000);
+                    ldebug << "response size: " << _http_resp.size() << lend;
+                    ldebug << "HTTP RESPONSE: " << _http_resp << lend;
+                    dump_hex(_http_resp);
+                    sl_socket_close(e.so);
+                });
             });
         });     
     }
