@@ -164,7 +164,7 @@ public:
     clnd_dns_packet( const clnd_dns_packet &rhs );
     clnd_dns_packet& operator= (const clnd_dns_packet &rhs );
 
-    // The size of the packet, should always be 10
+    // The size of the packet, should always be 12
     size_t size() const;
     // The buffer point of the packet
     const char *const pbuf();

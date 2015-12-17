@@ -115,7 +115,7 @@ clnd_dns_packet& clnd_dns_packet::operator= (const clnd_dns_packet &rhs )
     ar_count_ = rhs.ar_count_;
     return *this;
 }
-size_t clnd_dns_packet::size() const { return sizeof(uint16_t) * 5; }
+size_t clnd_dns_packet::size() const { return sizeof(uint16_t) * 6; }
 const char *const clnd_dns_packet::pbuf() { return (char *)this; }
 
 clnd_dns_packet * clnd_dns_packet::dns_resp_packet(string &buf, dns_rcode rcode, uint16_t ancount) const {
@@ -174,7 +174,11 @@ bool clnd_dns_packet::get_is_authoritative() const
 void clnd_dns_packet::set_is_authoritative(bool auth)
 {
     uint16_t _h_flag = ntohs(flags_);
-    _h_flag |= 0x0400;
+    if ( auth ) {
+        _h_flag |= 0x0400;
+    } else {
+        _h_flag &= 0xFBFF;
+    }
     flags_ = htons(_h_flag);
 }
 bool clnd_dns_packet::get_is_truncation() const
@@ -190,7 +194,11 @@ bool clnd_dns_packet::get_is_recursive_desired() const
 void clnd_dns_packet::set_is_recursive_desired(bool rd)
 {
     uint16_t _h_flag = ntohs(flags_);
-    _h_flag |= 0x0100;
+    if ( rd ) {
+        _h_flag |= 0x0100;
+    } else {
+        _h_flag &= 0xFEFF;
+    }
     flags_ = htons(_h_flag);
 }
 bool clnd_dns_packet::get_is_recursive_available() const
