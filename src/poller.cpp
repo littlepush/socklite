@@ -251,7 +251,19 @@ bool sl_poller::monitor_socket( SOCKET_T so, bool oneshot, SL_EVENT_ID eid, bool
 	}
 	if ( -1 == epoll_ctl( m_fd, _op, so, &_ee ) ) {
 		lerror << "failed to monitor the socket " << so << ": " << ::strerror(errno) << lend;
-		return false;
+		if ( errno == EEXIST ) {
+			if ( -1 == epoll_ctl( m_fd, EPOLL_CTL_MOD, so, &_ee ) ) {
+				lerror << "failed to monitor the socket " << so << ": " << ::strerror(errno) << lend;
+				return false;
+			}
+		} else if ( errno == ENOENT ) {
+			if ( -1 == epoll_ctl(m_fd, EPOLL_CTL_ADD, so, &_ee ) ) {
+				lerror << "failed to monitor the socket " << so << ": " << ::strerror(errno) << lend;
+				return false;
+			}
+		} else {
+			return false;
+		}
 	}
 #elif SL_TARGET_MAC
 	struct kevent _ke;

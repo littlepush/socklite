@@ -352,7 +352,7 @@ void _sl_tcp_socket_on_write(sl_event e) {
         if ( sl_events::server().has_handler(e.so, SL_EVENT_READ) ) {
             _eid |= SL_EVENT_READ;
         }
-        sl_poller::server().monitor_socket(e.so, true, (SL_EVENT_ID)_eid);
+        sl_poller::server().monitor_socket(e.so, true, (SL_EVENT_ID)_eid, true);
     } while ( false );
     if ( _sswpkt->callback ) _sswpkt->callback(e);
 }
@@ -391,7 +391,7 @@ bool sl_tcp_socket_send(SOCKET_T tso, const string &pkt, sl_socket_event_handler
     if ( sl_events::server().has_handler(tso, SL_EVENT_READ) ) {
         _eid |= SL_EVENT_READ;
     }
-    sl_poller::server().monitor_socket(tso, true, (SL_EVENT_ID)_eid);
+    sl_poller::server().monitor_socket(tso, true, (SL_EVENT_ID)_eid, true);
 
     return true;
 }
