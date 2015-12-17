@@ -222,7 +222,7 @@ static void sl_socks5_handshake(SOCKET_T so) {
 	sl_poller::server().monitor_socket(so);
 	sl_poller::server().monitor_socket(_wdst.m_socket);
 
-	// Send response package
+	// Send response packet
 	sl_socks5_did_connect_to_peer(so, network_domain_to_inaddr(_addr.c_str()), _port);
 }
 

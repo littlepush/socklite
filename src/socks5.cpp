@@ -43,7 +43,7 @@ sl_methods sl_socks5_handshake_handler(SOCKET_T so) {
 	sl_tcpsocket _wsrc(so);
 	string _buffer;
 
-	// Try to read the handshake package
+	// Try to read the handshake packet
 	if ( (_wsrc.read_data(_buffer) & SO_READ_DONE) == 0 ) return sl_method_nomethod;
 	sl_socks5_handshake_request *_req = (sl_socks5_handshake_request *)_buffer.data();
 	sl_socks5_handshake_response _resp(sl_method_nomethod);

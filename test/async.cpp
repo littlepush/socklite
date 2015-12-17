@@ -72,8 +72,8 @@ int main( int argc, char * argv[] )
             }
             ldebug << "connected to " << _test_domain << lend;
             linfo << "we now connect to " << _test_domain << lnewl << "try to send basic http request" << lend;
-            string _http_pkg = "GET / HTTP/1.1\r\n\r\n";
-            sl_tcp_socket_send(e.so, _http_pkg, [](sl_event e) {
+            string _http_pkt = "GET / HTTP/1.1\r\n\r\n";
+            sl_tcp_socket_send(e.so, _http_pkt, [](sl_event e) {
                 if ( e.event == SL_EVENT_FAILED ) {
                     lerror << "failed to send data to www.baidu.com" << lend;
                     sl_socket_close(e.so);
@@ -135,12 +135,12 @@ int main( int argc, char * argv[] )
         lerror << "failed to init a socket for udp listening" << lend;
     } else {
         sl_udp_socket_listen(_dso, [&](sl_event e) {
-            string _dnspkg;
-            sl_udp_socket_read(e.so, e.address, _dnspkg);
+            string _dnspkt;
+            sl_udp_socket_read(e.so, e.address, _dnspkt);
             string _domain;
-            dns_get_domain(_dnspkg.c_str(), _dnspkg.size(), _domain);
-            const clnd_dns_package *_pkg = (const clnd_dns_package *)_dnspkg.c_str();
-            uint16_t _tid = _pkg->get_transaction_id();
+            dns_get_domain(_dnspkt.c_str(), _dnspkt.size(), _domain);
+            const clnd_dns_packet *_pkt = (const clnd_dns_packet *)_dnspkt.c_str();
+            uint16_t _tid = _pkt->get_transaction_id();
             sl_peerinfo _pi(e.address.sin_addr.s_addr, ntohs(e.address.sin_port));
             linfo << "get request from " << _pi << " to query domain " << _domain << lend;
             sl_async_gethostname(_domain, [_domain, _tid, e, _pi](const vector<sl_ip> & iplist){
@@ -160,25 +160,25 @@ int main( int argc, char * argv[] )
         lerror << "failed to init a socket for proxy udp dns listening" << lend;
     } else {
         sl_udp_socket_listen(_dsso, [&](sl_event e) {
-            string _dnspkg;
-            sl_udp_socket_read(e.so, e.address, _dnspkg);
+            string _dnspkt;
+            sl_udp_socket_read(e.so, e.address, _dnspkt);
             string _domain;
-            dns_get_domain(_dnspkg.c_str(), _dnspkg.size(), _domain);
-            // const clnd_dns_package *_pkg = (const clnd_dns_package *)_dnspkg.c_str();
-            // uint16_t _tid = _pkg->get_transaction_id();
+            dns_get_domain(_dnspkt.c_str(), _dnspkt.size(), _domain);
+            // const clnd_dns_packet *_pkt = (const clnd_dns_packet *)_dnspkt.c_str();
+            // uint16_t _tid = _pkt->get_transaction_id();
             sl_peerinfo _pi(e.address.sin_addr.s_addr, ntohs(e.address.sin_port));
             linfo << "get request from " << _pi << " to query domain " << _domain << lend;
             SOCKET_T _tso = sl_tcp_socket_init();
             sl_tcp_socket_connect(
                 _tso, sl_peerinfo("127.0.0.1:1080"), "8.8.8.8", 53, 
-                [e, _dnspkg, _pi](sl_event te) {
+                [e, _dnspkt, _pi](sl_event te) {
                 if ( te.event == SL_EVENT_FAILED ) {
                     lerror << "failed to connect to 8.8.8.8:53 via socks5 127.0.0.1:1080" << lend;
                     sl_socket_close(te.so);
                     return;
                 }
                 string _tcp_dns;
-                dns_generate_tcp_redirect_package(_dnspkg, _tcp_dns);
+                dns_generate_tcp_redirect_packet(_dnspkt, _tcp_dns);
                 sl_tcp_socket_send(te.so, _tcp_dns);
                 sl_tcp_socket_monitor(te.so, [e, _pi](sl_event te) {
                     if ( te.event == SL_EVENT_FAILED ) {
@@ -192,7 +192,7 @@ int main( int argc, char * argv[] )
                     sl_socket_close(te.so);
 
                     string _udp_resp;
-                    dns_generate_udp_response_package_from_tcp(_resp, _udp_resp);
+                    dns_generate_udp_response_packet_from_tcp(_resp, _udp_resp);
                     sl_udp_socket_send(e.so, _udp_resp, _pi);
                 });
             });

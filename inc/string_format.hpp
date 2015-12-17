@@ -89,7 +89,7 @@ namespace cpputility
         } while( _pos < value.size() );
     }
 
-    // Dump binary package with HEX
+    // Dump binary packet with HEX
     static inline void dump_hex(const char *data, unsigned int length, FILE *of = stdout) {
         const static unsigned int g_char_per_line = 16;
         const static unsigned int g_addr_size = sizeof(intptr_t) * 2 + 2;

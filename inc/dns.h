@@ -132,7 +132,7 @@ typedef enum {
 } dns_rcode;
 
 #pragma pack(push, 1)
-class clnd_dns_package {
+class clnd_dns_packet {
 protected:
     uint16_t        transaction_id_;
     uint16_t        flags_;
@@ -159,18 +159,18 @@ public:
     uint16_t        get_ns_count() const;
     uint16_t        get_ar_count() const;
 
-    clnd_dns_package( bool is_query = true, dns_opcode opcode = dns_opcode_standard, uint16_t qd_count = 1 );
-    clnd_dns_package( const char *data, uint16_t len );
-    clnd_dns_package( const clnd_dns_package &rhs );
-    clnd_dns_package& operator= (const clnd_dns_package &rhs );
+    clnd_dns_packet( bool is_query = true, dns_opcode opcode = dns_opcode_standard, uint16_t qd_count = 1 );
+    clnd_dns_packet( const char *data, uint16_t len );
+    clnd_dns_packet( const clnd_dns_packet &rhs );
+    clnd_dns_packet& operator= (const clnd_dns_packet &rhs );
 
-    // The size of the package, should always be 10
+    // The size of the packet, should always be 10
     size_t size() const;
-    // The buffer point of the package
+    // The buffer point of the packet
     const char *const pbuf();
 
-    clnd_dns_package *dns_resp_package(string &buf, dns_rcode rcode, uint16_t ancount = 1) const;
-    clnd_dns_package *dns_truncation_package( string &buf ) const;
+    clnd_dns_packet *dns_resp_packet(string &buf, dns_rcode rcode, uint16_t ancount = 1) const;
+    clnd_dns_packet *dns_truncation_packet( string &buf ) const;
 
 protected:
     static bool clnd_dns_support_recursive;
@@ -181,41 +181,41 @@ public:
 
 #pragma pack(pop)
 
-// Get the domain from the dns querying package.
+// Get the domain from the dns querying packet.
 // The query domain seg will store the domain in the following format:
 // [length:1Byte][component][length:1Byte][component]...
-int dns_get_domain( const char *pkg, unsigned int len, std::string &domain );
+int dns_get_domain( const char *pkt, unsigned int len, std::string &domain );
 
-// Generate a query package
-int dns_generate_query_package( const string &query_name, string& buffer, dns_qtype qtype = dns_qtype_host );
+// Generate a query packet
+int dns_generate_query_packet( const string &query_name, string& buffer, dns_qtype qtype = dns_qtype_host );
 
-// Generate a tc package
-int dns_generate_tc_package( const string& incoming_pkg, string& buffer );
+// Generate a tc packet
+int dns_generate_tc_packet( const string& incoming_pkt, string& buffer );
 
-// Generate a tcp redirect package
-int dns_generate_tcp_redirect_package( const string &incoming_pkg, string &buffer );
+// Generate a tcp redirect packet
+int dns_generate_tcp_redirect_packet( const string &incoming_pkt, string &buffer );
 
-// Generate a udp redirect package from tcp response
-int dns_generate_udp_response_package_from_tcp( const string &incoming_pkg, string &buffer );
+// Generate a udp redirect packet from tcp response
+int dns_generate_udp_response_packet_from_tcp( const string &incoming_pkt, string &buffer );
 
-// Generate the A records response from the received package
-void dns_generate_a_records_resp( const char *pkg, unsigned int len, vector<uint32_t> ipaddress, string &buf );
+// Generate the A records response from the received packet
+void dns_generate_a_records_resp( const char *pkt, unsigned int len, vector<uint32_t> ipaddress, string &buf );
 
-// Generate response package for specified query domain
+// Generate response packet for specified query domain
 void dns_generate_a_records_resp( 
     const string &query_domain, 
     uint16_t trans_id, 
     const vector<uint32_t> & iplist, 
     string &buf );
 
-// Generate the C Name records response from the received package
-void dns_gnerate_cname_records_resp( const char *pkg, unsigned int len, vector<string> cnamelist, string &buf );
+// Generate the C Name records response from the received packet
+void dns_gnerate_cname_records_resp( const char *pkt, unsigned int len, vector<string> cnamelist, string &buf );
 
-// Get all available A records from a package
-void dns_get_a_records( const char *pkg, unsigned int len, string &qdomain, vector<uint32_t> &a_records );
+// Get all available A records from a packet
+void dns_get_a_records( const char *pkt, unsigned int len, string &qdomain, vector<uint32_t> &a_records );
 
 // Check if is a query request
-bool dns_is_query(const char *pkg, unsigned int len);
+bool dns_is_query(const char *pkt, unsigned int len);
 
 #endif
 

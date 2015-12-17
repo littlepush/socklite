@@ -69,16 +69,16 @@
 
 #ifdef SOCK_LITE_INTEGRATION_DNS
 
-bool clnd_dns_package::clnd_dns_support_recursive = true;
-uint16_t clnd_dns_package::clnd_dns_tid = 1;
+bool clnd_dns_packet::clnd_dns_support_recursive = true;
+uint16_t clnd_dns_packet::clnd_dns_tid = 1;
 
 // DNS Package class
-clnd_dns_package::clnd_dns_package( const char *data, uint16_t len )
+clnd_dns_packet::clnd_dns_packet( const char *data, uint16_t len )
 {
-    memcpy((void *)&transaction_id_, data, sizeof(clnd_dns_package));
+    memcpy((void *)&transaction_id_, data, sizeof(clnd_dns_packet));
 }
 
-clnd_dns_package::clnd_dns_package( bool is_query, dns_opcode opcode, uint16_t qd_count)
+clnd_dns_packet::clnd_dns_packet( bool is_query, dns_opcode opcode, uint16_t qd_count)
     : transaction_id_(clnd_dns_tid++), flags_(0), 
     qd_count_( htons(qd_count) ), 
     an_count_(0), ns_count_(0), ar_count_(0) 
@@ -100,12 +100,12 @@ clnd_dns_package::clnd_dns_package( bool is_query, dns_opcode opcode, uint16_t q
     flags_ = htons(_h_flag);
 };
 
-clnd_dns_package::clnd_dns_package( const clnd_dns_package &rhs )
+clnd_dns_packet::clnd_dns_packet( const clnd_dns_packet &rhs )
     : transaction_id_(rhs.transaction_id_), flags_(rhs.flags_),
     qd_count_(rhs.qd_count_), an_count_(rhs.an_count_),
     ns_count_(rhs.ns_count_), ar_count_(rhs.ar_count_) { }
 
-clnd_dns_package& clnd_dns_package::operator= (const clnd_dns_package &rhs )
+clnd_dns_packet& clnd_dns_packet::operator= (const clnd_dns_packet &rhs )
 {
     transaction_id_ = rhs.transaction_id_;
     flags_ = rhs.flags_;
@@ -115,13 +115,13 @@ clnd_dns_package& clnd_dns_package::operator= (const clnd_dns_package &rhs )
     ar_count_ = rhs.ar_count_;
     return *this;
 }
-size_t clnd_dns_package::size() const { return sizeof(uint16_t) * 5; }
-const char *const clnd_dns_package::pbuf() { return (char *)this; }
+size_t clnd_dns_packet::size() const { return sizeof(uint16_t) * 5; }
+const char *const clnd_dns_packet::pbuf() { return (char *)this; }
 
-clnd_dns_package * clnd_dns_package::dns_resp_package(string &buf, dns_rcode rcode, uint16_t ancount) const {
-    buf.resize(sizeof(clnd_dns_package));
-    //clnd_dns_package *_presp = new ((void*)&buf[0]) clnd_dns_package(*this);
-    clnd_dns_package *_presp = (clnd_dns_package *)&buf[0];
+clnd_dns_packet * clnd_dns_packet::dns_resp_packet(string &buf, dns_rcode rcode, uint16_t ancount) const {
+    buf.resize(sizeof(clnd_dns_packet));
+    //clnd_dns_packet *_presp = new ((void*)&buf[0]) clnd_dns_packet(*this);
+    clnd_dns_packet *_presp = (clnd_dns_packet *)&buf[0];
     *_presp = *this;
     uint16_t _h_flag = ntohs(flags_);
     // Query -> Response
@@ -134,9 +134,9 @@ clnd_dns_package * clnd_dns_package::dns_resp_package(string &buf, dns_rcode rco
     return _presp;
 }
 
-clnd_dns_package * clnd_dns_package::dns_truncation_package( string &buf ) const {
-    buf.resize(sizeof(clnd_dns_package));
-    clnd_dns_package *_presp = (clnd_dns_package *)&buf[0];
+clnd_dns_packet * clnd_dns_packet::dns_truncation_packet( string &buf ) const {
+    buf.resize(sizeof(clnd_dns_packet));
+    clnd_dns_packet *_presp = (clnd_dns_packet *)&buf[0];
     *_presp = *this;
     uint16_t _h_flag = ntohs(flags_);
     // Query -> Response
@@ -147,75 +147,75 @@ clnd_dns_package * clnd_dns_package::dns_truncation_package( string &buf ) const
     return _presp;
 }
 
-uint16_t clnd_dns_package::get_transaction_id() const 
+uint16_t clnd_dns_packet::get_transaction_id() const 
 {
     return ntohs(transaction_id_);
 }
-bool clnd_dns_package::get_is_query_request() const
+bool clnd_dns_packet::get_is_query_request() const
 {
     uint16_t _h_flag = ntohs(flags_);
     return (_h_flag & 0x8000) == 0;
 }
-bool clnd_dns_package::get_is_response_request() const
+bool clnd_dns_packet::get_is_response_request() const
 {
     uint16_t _h_flag = ntohs(flags_);
     return (_h_flag & 0x8000) > 0;
 }
-dns_opcode clnd_dns_package::get_opcode() const
+dns_opcode clnd_dns_packet::get_opcode() const
 {
     uint16_t _h_flag = ntohs(flags_);
     return (dns_opcode)((_h_flag >>= 13) & 0x000F);
 }
-bool clnd_dns_package::get_is_authoritative() const
+bool clnd_dns_packet::get_is_authoritative() const
 {
     uint16_t _h_flag = ntohs(flags_);
     return (_h_flag & 0x0400) > 0;
 }
-void clnd_dns_package::set_is_authoritative(bool auth)
+void clnd_dns_packet::set_is_authoritative(bool auth)
 {
     uint16_t _h_flag = ntohs(flags_);
     _h_flag |= 0x0400;
     flags_ = htons(_h_flag);
 }
-bool clnd_dns_package::get_is_truncation() const
+bool clnd_dns_packet::get_is_truncation() const
 {
     uint16_t _h_flag = ntohs(flags_);
     return (_h_flag & 0x0200) > 0;
 }
-bool clnd_dns_package::get_is_recursive_desired() const
+bool clnd_dns_packet::get_is_recursive_desired() const
 {
     uint16_t _h_flag = ntohs(flags_);
     return (_h_flag & 0x0100) > 0;
 }
-void clnd_dns_package::set_is_recursive_desired(bool rd)
+void clnd_dns_packet::set_is_recursive_desired(bool rd)
 {
     uint16_t _h_flag = ntohs(flags_);
     _h_flag |= 0x0100;
     flags_ = htons(_h_flag);
 }
-bool clnd_dns_package::get_is_recursive_available() const
+bool clnd_dns_packet::get_is_recursive_available() const
 {
     uint16_t _h_flag = ntohs(flags_);
     return (_h_flag & 0x0080) > 0;
 }
-dns_rcode clnd_dns_package::get_resp_code() const
+dns_rcode clnd_dns_packet::get_resp_code() const
 {
     uint16_t _h_flag = ntohs(flags_);
     return (dns_rcode)(_h_flag & 0x000F);
 }
-uint16_t clnd_dns_package::get_qd_count() const
+uint16_t clnd_dns_packet::get_qd_count() const
 {
     return ntohs(qd_count_);
 }
-uint16_t clnd_dns_package::get_an_count() const
+uint16_t clnd_dns_packet::get_an_count() const
 {
     return ntohs(an_count_);
 }
-uint16_t clnd_dns_package::get_ns_count() const
+uint16_t clnd_dns_packet::get_ns_count() const
 {
     return ntohs(ns_count_);
 }
-uint16_t clnd_dns_package::get_ar_count() const
+uint16_t clnd_dns_packet::get_ar_count() const
 {
     return ntohs(ar_count_);
 }
@@ -249,7 +249,7 @@ int _dns_get_format_domain( const char *data, string &domain ) {
     return domain.size() + 2;
 }
 
-int _dns_get_format_domain( const char *begin_of_domain, const char *begin_of_pkg, string &domain ) {
+int _dns_get_format_domain( const char *begin_of_domain, const char *begin_of_pkt, string &domain ) {
     domain.clear();
     int _readsize = 0;
     for ( ;; ) {
@@ -268,7 +268,7 @@ int _dns_get_format_domain( const char *begin_of_domain, const char *begin_of_pk
                 _offset = (uint16_t)(_l & 0x3F);
                 _readsize += 1;
             }
-            _dns_get_format_domain(begin_of_pkg + _offset, _reset_domain);
+            _dns_get_format_domain(begin_of_pkt + _offset, _reset_domain);
             domain += _reset_domain;
             break;
         } else {
@@ -281,31 +281,31 @@ int _dns_get_format_domain( const char *begin_of_domain, const char *begin_of_pk
     return _readsize;
 }
 
-// Get the domain from the dns querying package.
+// Get the domain from the dns querying packet.
 // The query domain seg will store the domain in the following format:
 // [length:1Byte][component][length:1Byte][component]...
-int dns_get_domain( const char *pkg, unsigned int len, std::string &domain )
+int dns_get_domain( const char *pkt, unsigned int len, std::string &domain )
 {
-    // the package is too small
-    if ( len < sizeof(clnd_dns_package) ) return -1;
-    const char *_pDomain = pkg + sizeof(clnd_dns_package);
+    // the packet is too small
+    if ( len < sizeof(clnd_dns_packet) ) return -1;
+    const char *_pDomain = pkt + sizeof(clnd_dns_packet);
     _dns_get_format_domain(_pDomain, domain);
     return 0;
 }
 
-int dns_generate_query_package( const string &query_name, string& buffer, dns_qtype qtype ) 
+int dns_generate_query_packet( const string &query_name, string& buffer, dns_qtype qtype ) 
 {
     string _fdomain;
     _dns_format_domain(query_name, _fdomain);
 
     // Buffer
-    buffer.resize(sizeof(clnd_dns_package) + _fdomain.size() + 2 * sizeof(uint8_t) + 2 * sizeof(uint8_t));
+    buffer.resize(sizeof(clnd_dns_packet) + _fdomain.size() + 2 * sizeof(uint8_t) + 2 * sizeof(uint8_t));
     // Header
-    //clnd_dns_package *_pquery = (clnd_dns_package*)&buffer[0]);
-    clnd_dns_package _query_pkg;
-    memcpy(&buffer[0], _query_pkg.pbuf(), _query_pkg.size());
+    //clnd_dns_packet *_pquery = (clnd_dns_packet*)&buffer[0]);
+    clnd_dns_packet _query_pkt;
+    memcpy(&buffer[0], _query_pkt.pbuf(), _query_pkt.size());
     // Domain
-    char *_data_area = (char *)&buffer[0] + sizeof(clnd_dns_package);
+    char *_data_area = (char *)&buffer[0] + sizeof(clnd_dns_packet);
     memcpy(_data_area, _fdomain.c_str(), _fdomain.size());
     // Flags
     _data_area += _fdomain.size();
@@ -315,50 +315,50 @@ int dns_generate_query_package( const string &query_name, string& buffer, dns_qt
     return buffer.size();
 }
 
-int dns_generate_tc_package( const string& incoming_pkg, string& buffer ) 
+int dns_generate_tc_packet( const string& incoming_pkt, string& buffer ) 
 {
-    clnd_dns_package _ipkg(incoming_pkg.c_str(), sizeof(clnd_dns_package));
-    _ipkg.dns_truncation_package(buffer);
-    buffer.resize(incoming_pkg.size());
-    memcpy((char *)&buffer[0] + sizeof(clnd_dns_package), 
-        incoming_pkg.c_str() + sizeof(clnd_dns_package),
-        incoming_pkg.size() - sizeof(clnd_dns_package));
+    clnd_dns_packet _ipkt(incoming_pkt.c_str(), sizeof(clnd_dns_packet));
+    _ipkt.dns_truncation_packet(buffer);
+    buffer.resize(incoming_pkt.size());
+    memcpy((char *)&buffer[0] + sizeof(clnd_dns_packet), 
+        incoming_pkt.c_str() + sizeof(clnd_dns_packet),
+        incoming_pkt.size() - sizeof(clnd_dns_packet));
     return buffer.size();
 }
 
-int dns_generate_tcp_redirect_package( const string &incoming_pkg, string &buffer )
+int dns_generate_tcp_redirect_packet( const string &incoming_pkt, string &buffer )
 {
-    buffer.resize(incoming_pkg.size() + sizeof(uint16_t));
+    buffer.resize(incoming_pkt.size() + sizeof(uint16_t));
     uint16_t *_plen = (uint16_t *)&buffer[0];
-    *_plen = htons(incoming_pkg.size());
-    memcpy((char *)&buffer[2], incoming_pkg.c_str(), incoming_pkg.size());
+    *_plen = htons(incoming_pkt.size());
+    memcpy((char *)&buffer[2], incoming_pkt.c_str(), incoming_pkt.size());
     return buffer.size();
 }
 
-int dns_generate_udp_response_package_from_tcp( const string &incoming_pkg, string &buffer )
+int dns_generate_udp_response_packet_from_tcp( const string &incoming_pkt, string &buffer )
 {
-    buffer.resize(incoming_pkg.size() - sizeof(uint16_t));
-    memcpy((char *)&buffer[0], incoming_pkg.c_str() + sizeof(uint16_t), incoming_pkg.size() - sizeof(uint16_t));
+    buffer.resize(incoming_pkt.size() - sizeof(uint16_t));
+    memcpy((char *)&buffer[0], incoming_pkt.c_str() + sizeof(uint16_t), incoming_pkt.size() - sizeof(uint16_t));
     return buffer.size();
 }
 
-void dns_generate_a_records_resp( const char *pkg, unsigned int len, vector<uint32_t> ipaddress, string &buf )
+void dns_generate_a_records_resp( const char *pkt, unsigned int len, vector<uint32_t> ipaddress, string &buf )
 {
     // Resp Header
-    clnd_dns_package _ipkg(pkg, len);
-    _ipkg.dns_resp_package(buf, dns_rcode_noerr, (uint16_t)ipaddress.size());
+    clnd_dns_packet _ipkt(pkt, len);
+    _ipkt.dns_resp_packet(buf, dns_rcode_noerr, (uint16_t)ipaddress.size());
 
-    // All length: incoming package(header + query domain) + 2bytes domain-name(offset to query domain) + 
+    // All length: incoming packet(header + query domain) + 2bytes domain-name(offset to query domain) + 
     // 2 bytes type(A) + 2 bytes class(IN) + 4 bytes(TTL) + 2bytes(r-length) + 4bytes(r-data, ipaddr)
     buf.resize( len + (2 + 2 + 2 + 4 + 2 + 4) * ipaddress.size() );
     // Query Domain
     memcpy(
-        &buf[0] + sizeof(clnd_dns_package), 
-        pkg + sizeof(clnd_dns_package),
-        len - sizeof(clnd_dns_package)
+        &buf[0] + sizeof(clnd_dns_packet), 
+        pkt + sizeof(clnd_dns_packet),
+        len - sizeof(clnd_dns_packet)
         );
     // Offset
-    uint16_t _name_offset = sizeof(clnd_dns_package);
+    uint16_t _name_offset = sizeof(clnd_dns_packet);
     _name_offset |= 0xC000;
     _name_offset = htons(_name_offset);
     // Generate the RR
@@ -396,39 +396,39 @@ void dns_generate_a_records_resp( const char *pkg, unsigned int len, vector<uint
     }
 }
 
-// Generate response package for specified query domain
+// Generate response packet for specified query domain
 void dns_generate_a_records_resp( 
     const string &query_domain, 
     uint16_t trans_id, 
     const vector<uint32_t> & iplist, 
     string &buf )
 {
-    string _query_pkg;
-    dns_generate_query_package(query_domain, _query_pkg);
-    clnd_dns_package *_pkg = (clnd_dns_package *)&_query_pkg[0];
-    uint16_t* _ptid = (uint16_t *)_pkg;
+    string _query_pkt;
+    dns_generate_query_packet(query_domain, _query_pkt);
+    clnd_dns_packet *_pkt = (clnd_dns_packet *)&_query_pkt[0];
+    uint16_t* _ptid = (uint16_t *)_pkt;
     *_ptid = htons(trans_id);
-    dns_generate_a_records_resp(_query_pkg.c_str(), _query_pkg.size(), iplist, buf);
+    dns_generate_a_records_resp(_query_pkt.c_str(), _query_pkt.size(), iplist, buf);
 }
 
-void dns_gnerate_cname_records_resp( const char *pkg, unsigned int len, vector<string> cnamelist, string &buf )
+void dns_gnerate_cname_records_resp( const char *pkt, unsigned int len, vector<string> cnamelist, string &buf )
 {
     // Resp Header
-    clnd_dns_package _ipkg(pkg, len);
-    _ipkg.dns_resp_package(buf, dns_rcode_noerr, (uint16_t)cnamelist.size());
+    clnd_dns_packet _ipkt(pkt, len);
+    _ipkt.dns_resp_packet(buf, dns_rcode_noerr, (uint16_t)cnamelist.size());
 
-    // All length: incoming package(header + query domain) + 2bytes domain-name(offset to query domain) + 
+    // All length: incoming packet(header + query domain) + 2bytes domain-name(offset to query domain) + 
     // 2 bytes type(CName) + 2 bytes class(IN) + 4 bytes(TTL) + 2bytes(r-length) + r-length bytes(r-data, cname)
     //buf.resize( len + (2 + 2 + 2 + 4 + 2 + 4) * cnamelist.size() );
     buf.resize(len);
     // Query Domain
     memcpy(
-        &buf[0] + sizeof(clnd_dns_package), 
-        pkg + sizeof(clnd_dns_package),
-        len - sizeof(clnd_dns_package)
+        &buf[0] + sizeof(clnd_dns_packet), 
+        pkt + sizeof(clnd_dns_packet),
+        len - sizeof(clnd_dns_packet)
         );
     // Offset
-    uint16_t _name_offset = sizeof(clnd_dns_package);
+    uint16_t _name_offset = sizeof(clnd_dns_packet);
     _name_offset |= 0xC000;
     _name_offset = htons(_name_offset);
     // Generate the RR
@@ -469,18 +469,18 @@ void dns_gnerate_cname_records_resp( const char *pkg, unsigned int len, vector<s
     }
 }
 
-void dns_get_a_records( const char *pkg, unsigned int len, string &qdomain, vector<uint32_t> &a_records )
+void dns_get_a_records( const char *pkt, unsigned int len, string &qdomain, vector<uint32_t> &a_records )
 {
-    clnd_dns_package *_pheader = (clnd_dns_package *)pkg;
-    const char *_pDomain = pkg + sizeof(clnd_dns_package);
-    int _readsize = _dns_get_format_domain(_pDomain, pkg, qdomain);
+    clnd_dns_packet *_pheader = (clnd_dns_packet *)pkt;
+    const char *_pDomain = pkt + sizeof(clnd_dns_packet);
+    int _readsize = _dns_get_format_domain(_pDomain, pkt, qdomain);
 
     // Begin Answer Point
-    const char *_pbuf = pkg + sizeof(clnd_dns_package) + _readsize + 2 + 2; // type + class
+    const char *_pbuf = pkt + sizeof(clnd_dns_packet) + _readsize + 2 + 2; // type + class
     uint16_t _an_count = _pheader->get_an_count();
     for ( uint16_t i = 0; i < _an_count; ++i ) {
         string _adomain;
-        int _asize = _dns_get_format_domain(_pbuf, pkg, _adomain);
+        int _asize = _dns_get_format_domain(_pbuf, pkt, _adomain);
         _pbuf += _asize;
 
         uint16_t _type = ntohs(*(uint16_t *)_pbuf);
@@ -504,9 +504,9 @@ void dns_get_a_records( const char *pkg, unsigned int len, string &qdomain, vect
 }
 
 // Check if is a query request
-bool dns_is_query(const char *pkg, unsigned int len)
+bool dns_is_query(const char *pkt, unsigned int len)
 {
-    clnd_dns_package *_pheader = (clnd_dns_package *)pkg;
+    clnd_dns_packet *_pheader = (clnd_dns_packet *)pkt;
     return _pheader->get_is_query_request();
 }
 

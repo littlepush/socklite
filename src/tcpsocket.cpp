@@ -186,7 +186,7 @@ bool sl_tcpsocket::setup_proxy(
 	memcpy(_buf + _index, password.data(), password.size());
 	_index += password.size();
 
-	// Send handshake package
+	// Send handshake packet
 	if (write(m_socket, _buf, _index) < 0) {
 		this->close();
 		return false;

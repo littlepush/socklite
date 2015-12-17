@@ -78,14 +78,14 @@ static inline const char *sl_socks5msg(sl_socks5rep rep) {
 };
 
 #pragma pack(push, 1)
-struct sl_socks5_package {
+struct sl_socks5_packet {
 	uint8_t 	ver;
 
 	// Default we only support version 5
-	sl_socks5_package() : ver(5) {}
+	sl_socks5_packet() : ver(5) {}
 };
 
-struct sl_socks5_handshake_request : public sl_socks5_package {
+struct sl_socks5_handshake_request : public sl_socks5_packet {
 	uint8_t		nmethods;
 };
 
@@ -116,20 +116,20 @@ struct sl_socks5_userpwd_request : public sl_socks5_handshake_request {
 		}
 };
 
-struct sl_socks5_handshake_response : public sl_socks5_package {
+struct sl_socks5_handshake_response : public sl_socks5_packet {
 	uint8_t		method;
 
-	sl_socks5_handshake_response() : sl_socks5_package() {}
-	sl_socks5_handshake_response(sl_methods m) : sl_socks5_package(), method(m) { }
+	sl_socks5_handshake_response() : sl_socks5_packet() {}
+	sl_socks5_handshake_response(sl_methods m) : sl_socks5_packet(), method(m) { }
 };
 
-struct sl_socks5_connect_request : public sl_socks5_package {
+struct sl_socks5_connect_request : public sl_socks5_packet {
 	uint8_t		cmd;
 	uint8_t		rsv;	// reserved
 	uint8_t		atyp;	// address type
 
 	sl_socks5_connect_request():
-		sl_socks5_package(), cmd(sl_socks5cmd_connect), rsv(0) {}
+		sl_socks5_packet(), cmd(sl_socks5cmd_connect), rsv(0) {}
 };
 
 struct sl_socks5_ipv4_request : public sl_socks5_connect_request {
@@ -142,12 +142,12 @@ struct sl_socks5_ipv4_request : public sl_socks5_connect_request {
 		}
 };
 
-struct sl_socks5_connect_response : public sl_socks5_package {
+struct sl_socks5_connect_response : public sl_socks5_packet {
 	uint8_t		rep;
 	uint8_t		rsv;
 	uint8_t		atyp;
 
-	sl_socks5_connect_response() : sl_socks5_package() {}
+	sl_socks5_connect_response() : sl_socks5_packet() {}
 };
 
 struct sl_socks5_ipv4_response : public sl_socks5_connect_response {
