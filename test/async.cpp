@@ -36,15 +36,39 @@ void tcp_redirect_callback(sl_event e, sl_event re) {
         return;
     }
     string _buf;
-    sl_tcp_socket_read(e.so, _buf, 512000);
-    sl_tcp_socket_send(re.so, _buf);
-    sl_tcp_socket_monitor(e.so, [re](sl_event e) {
-        tcp_redirect_callback(e, re);
-    });
+    if ( !sl_tcp_socket_read(e.so, _buf, 512000) ) {
+        sl_socket_close(e.so);
+        sl_socket_close(re.so);
+        return;
+    }
+    if ( !sl_tcp_socket_send(re.so, _buf, [e](sl_event re){
+        if ( re.event == SL_EVENT_FAILED ) {
+            sl_socket_close(e.so);
+            sl_socket_close(re.so);
+            return;
+        }
+        if ( !sl_tcp_socket_monitor(e.so, [re](sl_event e){
+            tcp_redirect_callback(e, re);
+        }) ) {
+            sl_socket_close(e.so);
+            sl_socket_close(re.so);
+            return;
+        }
+    })) {
+        sl_socket_close(e.so);
+        sl_socket_close(re.so);
+        return;
+    }
 }
+
+string _socks5 = "127.0.0.1:1080";
 
 int main( int argc, char * argv[] )
 {
+    if ( argc == 2 ) {
+        _socks5 = argv[1];
+    }
+
     cp_logger::start(stderr, log_debug);
     signal_agent _sa([](void){
         linfo << "the async server receive exit signal, ready to kill all working threads." << lend;
@@ -104,9 +128,9 @@ int main( int argc, char * argv[] )
     } else {
         string _proxy_domain = "www.google.com";
         ldebug << "before connect to " << _proxy_domain << lend;
-        sl_tcp_socket_connect(_ptso, sl_peerinfo("127.0.0.1:1080"), _proxy_domain, 80, [_proxy_domain](sl_event e) {
+        sl_tcp_socket_connect(_ptso, sl_peerinfo(_socks5), _proxy_domain, 80, [_proxy_domain](sl_event e) {
             if ( e.event == SL_EVENT_FAILED ) {
-                lerror << "failed to connect to " << _proxy_domain << " via socks5 proxy 127.0.0.1:1080" << lend;
+                lerror << "failed to connect to " << _proxy_domain << " via socks5 proxy " << _socks5 << lend;
                 sl_socket_close(e.so);
                 return;
             }
@@ -170,10 +194,10 @@ int main( int argc, char * argv[] )
             linfo << "get request from " << _pi << " to query domain " << _domain << lend;
             SOCKET_T _tso = sl_tcp_socket_init();
             sl_tcp_socket_connect(
-                _tso, sl_peerinfo("127.0.0.1:1080"), "8.8.8.8", 53, 
+                _tso, sl_peerinfo(_socks5), "8.8.8.8", 53, 
                 [e, _dnspkt, _pi](sl_event te) {
                 if ( te.event == SL_EVENT_FAILED ) {
-                    lerror << "failed to connect to 8.8.8.8:53 via socks5 127.0.0.1:1080" << lend;
+                    lerror << "failed to connect to 8.8.8.8:53 via socks5 " << _socks5 << lend;
                     sl_socket_close(te.so);
                     return;
                 }
@@ -200,10 +224,10 @@ int main( int argc, char * argv[] )
     }
 
     SOCKET_T _rso = sl_tcp_socket_init();
-    sl_tcp_socket_listen(_rso, sl_peerinfo(INADDR_ANY, 58422), [&](sl_event e){
+    sl_tcp_socket_listen(_rso, sl_peerinfo(INADDR_ANY, 58423), [&](sl_event e){
         SOCKET_T _redirect_so = sl_tcp_socket_init();
         ldebug << "receive a socket: " << e.so << ", create a redirect socket: " << _redirect_so << lend;
-        sl_tcp_socket_connect(_redirect_so, sl_peerinfo("127.0.0.1:1080"), "106.187.97.108", 38422, [e](sl_event re){
+        sl_tcp_socket_connect(_redirect_so, sl_peerinfo(_socks5), "106.187.97.108", 38422, [e](sl_event re){
             if ( re.event == SL_EVENT_FAILED ) {
                 lerror << "cannot connect to 106.187.97.108:38422" << lend;
                 sl_socket_close(re.so);

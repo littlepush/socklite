@@ -235,7 +235,7 @@ size_t sl_poller::fetch_events( sl_poller::earray &events, unsigned int timedout
                 _e.socktype = IPPROTO_UDP;
             }
 
-			ldebug << "get event for socket: " << _e.so << lend;
+			// ldebug << "get event for socket: " << _e.so << lend;
 			getsockopt( _e.so, SOL_SOCKET, SO_ERROR, 
 					(char *)&_error, (socklen_t *)&_len);
 			if ( _error == 0 ) {
@@ -243,24 +243,24 @@ size_t sl_poller::fetch_events( sl_poller::earray &events, unsigned int timedout
 #if SL_TARGET_LINUX
 				if ( _pe->events & EPOLLIN ) {
 					_e.event = SL_EVENT_DATA;
-					ldebug << "did get r/w event for socket: " << _e.so << ", event: " << sl_event_name(_e.event) << lend;
+					// ldebug << "did get r/w event for socket: " << _e.so << ", event: " << sl_event_name(_e.event) << lend;
 					events.push_back(_e);
 				}
 				if ( _pe->events & EPOLLOUT ) {
 					_e.event = SL_EVENT_WRITE;
-					ldebug << "did get r/w event for socket: " << _e.so << ", event: " << sl_event_name(_e.event) << lend;
+					// ldebug << "did get r/w event for socket: " << _e.so << ", event: " << sl_event_name(_e.event) << lend;
 					events.push_back(_e);
 				}
 #elif SL_TARGET_MAC
 				if ( _pe->filter == EVFILT_READ ) _e.event = SL_EVENT_DATA;
 				else _e.event = SL_EVENT_WRITE;
 				events.push_back(_e);
-				ldebug << "did get r/w event for socket: " << _e.so << ", event: " << sl_event_name(_e.event) << lend;
+				// ldebug << "did get r/w event for socket: " << _e.so << ", event: " << sl_event_name(_e.event) << lend;
 #endif
 			} else {
 				_e.event = SL_EVENT_FAILED;
 				events.push_back(_e);
-				ldebug << "did get r/w event for socket: " << _e.so << ", event: " << sl_event_name(_e.event) << lend;
+				// ldebug << "did get r/w event for socket: " << _e.so << ", event: " << sl_event_name(_e.event) << lend;
 			}
 
 		}
@@ -271,7 +271,7 @@ size_t sl_poller::fetch_events( sl_poller::earray &events, unsigned int timedout
 bool sl_poller::monitor_socket( SOCKET_T so, bool oneshot, SL_EVENT_ID eid, bool isreset ) {
 	if ( m_fd == -1 ) return false;
 
-	ldebug << "is going to monitor socket " << so << " for event " << sl_event_name(eid) << lend;
+	// ldebug << "is going to monitor socket " << so << " for event " << sl_event_name(eid) << lend;
 #if SL_TARGET_LINUX
 
 	// Socket must be nonblocking

@@ -66,16 +66,30 @@ void sl_events::_internal_start_runloop()
         _internal_runloop();
     });
 
-    ldebug << "in internal start runloop method, will add a new worker" << lend;
+    // ldebug << "in internal start runloop method, will add a new worker" << lend;
     this->_internal_add_worker();
     thread_pool_manager_ = new thread([this]{
         thread_agent _ta;
 
         while ( true ) {
             usleep(10000);
+            bool _has_broken = false;
+            do {
+                _has_broken = false;
+                size_t _broken_thread_index = -1;
+                for ( size_t i = 0; i < thread_pool_.size(); ++i ) {
+                    if ( thread_pool_[i]->joinable() ) continue;
+                    _broken_thread_index = i;
+                    _has_broken = true;
+                    break;
+                }
+                if ( _has_broken ) {
+                    delete thread_pool_[_broken_thread_index];
+                }
+            } while( _has_broken );
             if ( !this_thread_is_running() ) break;
             if ( events_pool_.size() > (thread_pool_.size() * 10) ) {
-                ldebug << "event pending count: " << events_pool_.size() << ", worker thread pool size: " << thread_pool_.size() << lend;
+                // ldebug << "event pending count: " << events_pool_.size() << ", worker thread pool size: " << thread_pool_.size() << lend;
                 this->_internal_add_worker();
             } else if ( events_pool_.size() < (thread_pool_.size() * 2) && thread_pool_.size() > 1 ) {
                 this->_internal_remove_worker();
@@ -126,7 +140,12 @@ void sl_events::_internal_runloop()
 void sl_events::_internal_add_worker()
 {
     thread *_worker = new thread([this](){
-        _internal_worker();
+        thread_agent _ta;
+        try {
+            _internal_worker();
+        } catch (exception e) {
+            lcritical << "got exception in side the internal worker " << this_thread::get_id() << lend;
+        }
     });
     thread_pool_.push_back(_worker);
 }
@@ -144,13 +163,12 @@ void sl_events::_internal_remove_worker()
 void sl_events::_internal_worker()
 {
     linfo << "strat a new worker thread " << this_thread::get_id() << lend;
-    thread_agent _ta;
 
     sl_event _local_event;
     sl_socket_event_handler _handler;
     while ( this_thread_is_running() ) {
         if ( !events_pool_.wait_for(milliseconds(10), [&](sl_event&& e){
-            ldebug << "processing " << e << lend;
+            // ldebug << "processing " << e << lend;
             _local_event = e;
             SOCKET_T _s = ((_local_event.event == SL_EVENT_ACCEPT) && 
                             (_local_event.socktype == IPPROTO_TCP)) ? 
@@ -160,13 +178,15 @@ void sl_events::_internal_worker()
                                 (_local_event.socktype == IPPROTO_UDP)) ?
                                 SL_EVENT_ACCEPT : _local_event.event;
             lock_guard<mutex> _(handler_mutex_);
-            pending_map_.erase(((((uint64_t)_local_event.so) << 4) | _local_event.event));
+            pending_map_.erase(((((uint64_t)_s) << 4) | _e));
             if ( _e != SL_EVENT_ACCEPT ) {
                 _handler = this->_replace_handler(_s, _e, NULL);
 #if SL_TARGET_LINUX
                 if ( _e == SL_EVENT_FAILED ) return;
                 SL_EVENT_ID _re_event = (_e == SL_EVENT_DATA) ? SL_EVENT_WRITE : SL_EVENT_DATA;
+                // ldebug << "check if the socket " << _s << " has monitoring other event like " << sl_event_name(_re_event) << lend;
                 if ( this->_has_handler(_s, _re_event) ) {
+                    // ldebug << "socket " << _e << " do monitoring " << sl_event_name(_re_event) << ", try to re-monitor it" << lend;
                     sl_poller::server().monitor_socket(_s, true, _re_event, true);
                 }
 #endif
@@ -203,11 +223,14 @@ sl_socket_event_handler sl_events::_fetch_handler(SOCKET_T so, SL_EVENT_ID eid)
 
 bool sl_events::_has_handler(SOCKET_T so, SL_EVENT_ID eid)
 {
+    // ldebug << "in _has_handler, try to search socket " << so << " with event: " << sl_event_name(eid) << lend;
     uint64_t _pe_search_key = ((((uint64_t)so) << 4) | eid);
     if ( pending_map_.find(_pe_search_key) == end(pending_map_) ) {
         // Not in pending, then find the event map
+        // ldebug << "the event " << sl_event_name(eid) << " for socket " << so << " is not in pending map, try to search handler map" << lend;
         auto _hit = event_map_.find(so);
         if ( _hit == end(event_map_) ) return false;
+        // ldebug << "get the handler set of the socket " << so << lend;
         sl_socket_event_handler _seh = (&_hit->second.on_accept)[SL_MACRO_LAST_1_INDEX(eid)];
         return (bool)_seh;
     } else {
@@ -241,7 +264,6 @@ void sl_events::update_handler( SOCKET_T so, SL_EVENT_ID eid, sl_socket_event_ha
     lock_guard<mutex> _(handler_mutex_);
     auto _hit = event_map_.find(so);
     if ( _hit == end(event_map_) ) return;
-    pending_map_[((((uint64_t)so) << 4) | eid)] = true;
     (&_hit->second.on_accept)[SL_MACRO_LAST_1_INDEX(eid)] = h;
 }
 bool sl_events::has_handler(SOCKET_T so, SL_EVENT_ID eid)
