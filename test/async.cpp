@@ -128,7 +128,7 @@ int main( int argc, char * argv[] )
     } else {
         string _proxy_domain = "www.google.com";
         ldebug << "before connect to " << _proxy_domain << lend;
-        sl_tcp_socket_connect(_ptso, sl_peerinfo(_socks5), _proxy_domain, 80, [_proxy_domain](sl_event e) {
+        if ( !sl_tcp_socket_connect(_ptso, sl_peerinfo(_socks5), _proxy_domain, 80, [_proxy_domain](sl_event e) {
             if ( e.event == SL_EVENT_FAILED ) {
                 lerror << "failed to connect to " << _proxy_domain << " via socks5 proxy " << _socks5 << lend;
                 sl_socket_close(e.so);
@@ -136,7 +136,9 @@ int main( int argc, char * argv[] )
             }
             linfo << "did connected to " << _proxy_domain << lend;
             sl_socket_close(e.so);
-        });
+        }) ) {
+            sl_socket_close(_ptso);
+        }
     }
 
     SOCKET_T _sso = sl_tcp_socket_init();
@@ -193,7 +195,7 @@ int main( int argc, char * argv[] )
             sl_peerinfo _pi(e.address.sin_addr.s_addr, ntohs(e.address.sin_port));
             linfo << "get request from " << _pi << " to query domain " << _domain << lend;
             SOCKET_T _tso = sl_tcp_socket_init();
-            sl_tcp_socket_connect(
+            if ( !sl_tcp_socket_connect(
                 _tso, sl_peerinfo(_socks5), "8.8.8.8", 53, 
                 [e, _dnspkt, _pi](sl_event te) {
                 if ( te.event == SL_EVENT_FAILED ) {
@@ -204,7 +206,7 @@ int main( int argc, char * argv[] )
                 string _tcp_dns;
                 dns_generate_tcp_redirect_packet(_dnspkt, _tcp_dns);
                 sl_tcp_socket_send(te.so, _tcp_dns);
-                sl_tcp_socket_monitor(te.so, [e, _pi](sl_event te) {
+                if ( !sl_tcp_socket_monitor(te.so, [e, _pi](sl_event te) {
                     if ( te.event == SL_EVENT_FAILED ) {
                         lerror << "the connection has been dropped for tcp socket: " << te.so << lend;
                         sl_socket_close(te.so);
@@ -218,8 +220,12 @@ int main( int argc, char * argv[] )
                     string _udp_resp;
                     dns_generate_udp_response_packet_from_tcp(_resp, _udp_resp);
                     sl_udp_socket_send(e.so, _udp_resp, _pi);
-                });
-            });
+                }) ) {
+                    sl_socket_close(te.so);
+                }
+            }) ) {
+                sl_socket_close(_tso);
+            }
         });
     }
 
