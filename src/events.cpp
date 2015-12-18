@@ -255,6 +255,9 @@ void sl_events::unbind( SOCKET_T so )
     if ( SOCKET_NOT_VALIDATE(so) ) return;
     lock_guard<mutex> _(handler_mutex_);
     event_map_.erase(so);
+    for ( int i = 0; i < 4; ++i ) {
+        pending_map_.erase( ((((uint64_t)so) << 4) | (1 << i)) );
+    }
 }
 void sl_events::update_handler( SOCKET_T so, SL_EVENT_ID eid, sl_socket_event_handler&& h)
 {

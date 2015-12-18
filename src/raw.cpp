@@ -51,9 +51,10 @@ sl_write_map_t      _g_so_write_map;
 void sl_socket_close(SOCKET_T so)
 {
     if ( SOCKET_NOT_VALIDATE(so) ) return;
-    //sl_event_unbind_handler(so);
+
     // ldebug << "the socket " << so << " will be unbind and closed" << lend;
     sl_events::server().unbind(so);
+    
     do {
         lock_guard<mutex> _(_g_so_write_mutex);
         _g_so_write_map.erase(so);
