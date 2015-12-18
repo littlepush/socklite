@@ -263,7 +263,7 @@ int _dns_get_format_domain( const char *begin_of_domain, const char *begin_of_pk
     for ( ;; ) {
         uint8_t _l = begin_of_domain[_readsize];
         _readsize += 1;
-        if ( _l & 0xC0 ) {
+        if ( (_l & 0xC0) == 0xC0 ) {
             // This is an offset
             string _reset_domain;
             uint16_t _offset = 0;

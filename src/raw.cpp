@@ -656,7 +656,7 @@ bool sl_udp_socket_read(SOCKET_T uso, struct sockaddr_in addr, string& buffer, s
     if ( SOCKET_NOT_VALIDATE(uso) ) return false;
 
     sl_peerinfo _pi(addr.sin_addr.s_addr, ntohs(addr.sin_port));
-    //ldebug << "udp socket " << uso << " tring to read data from " << _pi << lend;
+    ldebug << "udp socket " << uso << " tring to read data from " << _pi << lend;
     buffer.clear();
     buffer.resize(max_buffer_size);
 
@@ -733,7 +733,7 @@ void __sl_async_gethostnmae_udp(const string&& query_pkt, size_t use_index, asyn
     SOCKET_T _uso = sl_udp_socket_init();
     string _domain;
     dns_get_domain(query_pkt.c_str(), query_pkt.size(), _domain);
-    //ldebug << "initialize a udp socket " << _uso << " to query domain: " << _domain << lend;
+    ldebug << "initialize a udp socket " << _uso << " to query domain: " << _domain << lend;
     if ( !sl_udp_socket_send(_uso, query_pkt, _resolv_list[use_index]) ) {
         lerror << "failed to send dns query packet to " << _resolv_list[use_index] << lend;
         // Failed to send( unable to access the server );
@@ -861,11 +861,12 @@ void sl_async_gethostname(const string& host, async_dns_handler fp)
                 ntohs(_res.nsaddr_list[i].sin_port)
                 );
             _resolv_list.push_back(_pi);
-            //ldebug << "resolv get dns: " << _pi << lend;
+            ldebug << "resolv get dns: " << _pi << lend;
         }
     }
     string _qpkt;
     dns_generate_query_packet(host, _qpkt);
+    dump_hex(_qpkt);
     __sl_async_gethostnmae_udp(move(_qpkt), 0, fp);
 }
 

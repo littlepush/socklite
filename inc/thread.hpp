@@ -202,7 +202,11 @@ namespace cpputility {
     template < class Item > class event_pool
     {
     public:
-    	typedef function<void(Item&&)>	get_event_t;
+        typedef function<void()>                action_void_t;
+        typedef function<bool(bool)>            action_bool_t;
+    	typedef function<void(Item&&)>	        get_event_t;
+        typedef function<void(const Item&&)>    enum_event_t;
+        typedef function<bool(Item&&)>          find_event_t;
     protected:
     	mutex					mutex_;
     	condition_variable		cv_;
@@ -246,6 +250,22 @@ namespace cpputility {
     		cv_.notify_one();
     	};
 
+        template < typename Container, typename Locker >
+        void notify_lots(const Container &itemList, Locker *locker = NULL, enum_event_t enum_callback = NULL) {
+            unique_lock<mutex> _l(mutex_);
+            if ( locker != NULL ) {
+                locker->lock();
+            }
+            for ( auto && item : itemList ) {
+                pool_.emplace(item);
+                cv_.notify_one();
+                if ( enum_callback ) enum_callback(move(item));
+            }
+            if ( locker != NULL ) {
+                locker->unlock();
+            }
+        }
+
     	void clear() {
     		lock_guard<mutex> _l(mutex_);
     		pool_.clear();
@@ -254,6 +274,20 @@ namespace cpputility {
         size_t size() {
             lock_guard<mutex> _l(mutex_);
             return pool_.size();
+        }
+
+        bool search_pending_event(action_void_t before, find_event_t find_event, action_bool_t after = NULL) {
+            lock_guard<mutex> _l(mutex_);
+            if ( before ) before();
+            bool _search_ret = false;
+            for ( auto &&_item : pool_ ) {
+                if ( find_event(move(_item)) ) {
+                    _search_ret = true;
+                    break;
+                }
+            }
+            if ( after ) _search_ret = after(_search_ret);
+            return _search_ret;
         }
     };
 }

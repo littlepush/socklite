@@ -22,6 +22,32 @@
 
 #include "poller.h"
 
+// Convert the EVENT_ID to string
+const string sl_event_name(SL_EVENT_ID eid)
+{
+	static string _accept = " SL_EVENT_ACCEPT ";
+	static string _data = " SL_EVENT_DATA|SL_EVENT_READ ";
+	static string _failed = " SL_EVENT_FAILED ";
+	static string _write = " SL_EVENT_WRITE|SL_EVENT_CONNECT ";
+	static string _unknow = " Unknow Event ";
+
+	string _name;
+	if ( eid & SL_EVENT_ACCEPT ) _name += _accept;
+	if ( eid & SL_EVENT_DATA ) _name += _data;
+	if ( eid & SL_EVENT_FAILED ) _name += _failed;
+	if ( eid & SL_EVENT_WRITE ) _name += _write;
+	if ( _name.size() == 0 ) return _unknow;
+	return _name;
+}
+// Output of the event
+ostream & operator << (ostream &os, const sl_event & e)
+{
+    os
+        << "event " << sl_event_name(e.event) << " for "
+        << (e.socktype == IPPROTO_TCP ? "tcp socket " : "udp socket ") << e.so;
+    return os;
+}
+
 sl_poller::sl_poller()
 	:m_fd(-1), m_events(NULL), m_runloop_status(false), m_runloop_ret(0)
 {
@@ -198,25 +224,8 @@ size_t sl_poller::fetch_events( sl_poller::earray &events, unsigned int timedout
 #elif SL_TARGET_MAC
 			_e.so = _pe->ident;
 #endif
-			//ldebug << "get event for socket: " << _e.so << lend;
 			int _error = 0, _len = sizeof(int);
-			getsockopt( _e.so, SOL_SOCKET, SO_ERROR, 
-					(char *)&_error, (socklen_t *)&_len);
-			if ( _error == 0 ) {
-				// Check if is read or write
-#if SL_TARGET_LINUX
-				if ( _pe->events & EPOLLIN ) _e.event = SL_EVENT_DATA;
-				else _e.event = SL_EVENT_WRITE;
-#elif SL_TARGET_MAC
-				if ( _pe->filter == EVFILT_READ ) _e.event = SL_EVENT_DATA;
-				else _e.event = SL_EVENT_WRITE;
-#endif
-			} else {
-				_e.event = SL_EVENT_FAILED;
-			}
-
-			//ldebug << "did get r/w event for socket: " << _e.so << ", event: " << _e.event << lend;
-			
+			// Get the type
             int _type;
 			getsockopt( _e.so, SOL_SOCKET, SO_TYPE,
 					(char *)&_type, (socklen_t *)&_len);
@@ -225,7 +234,35 @@ size_t sl_poller::fetch_events( sl_poller::earray &events, unsigned int timedout
             } else {
                 _e.socktype = IPPROTO_UDP;
             }
-			events.push_back(_e);
+
+			ldebug << "get event for socket: " << _e.so << lend;
+			getsockopt( _e.so, SOL_SOCKET, SO_ERROR, 
+					(char *)&_error, (socklen_t *)&_len);
+			if ( _error == 0 ) {
+				// Check if is read or write
+#if SL_TARGET_LINUX
+				if ( _pe->events & EPOLLIN ) {
+					_e.event = SL_EVENT_DATA;
+					ldebug << "did get r/w event for socket: " << _e.so << ", event: " << sl_event_name(_e.event) << lend;
+					events.push_back(_e);
+				}
+				if ( _pe->events & EPOLLOUT ) {
+					_e.event = SL_EVENT_WRITE;
+					ldebug << "did get r/w event for socket: " << _e.so << ", event: " << sl_event_name(_e.event) << lend;
+					events.push_back(_e);
+				}
+#elif SL_TARGET_MAC
+				if ( _pe->filter == EVFILT_READ ) _e.event = SL_EVENT_DATA;
+				else _e.event = SL_EVENT_WRITE;
+				events.push_back(_e);
+				ldebug << "did get r/w event for socket: " << _e.so << ", event: " << sl_event_name(_e.event) << lend;
+#endif
+			} else {
+				_e.event = SL_EVENT_FAILED;
+				events.push_back(_e);
+				ldebug << "did get r/w event for socket: " << _e.so << ", event: " << sl_event_name(_e.event) << lend;
+			}
+
 		}
 	}
 	return events.size();
@@ -233,6 +270,8 @@ size_t sl_poller::fetch_events( sl_poller::earray &events, unsigned int timedout
 
 bool sl_poller::monitor_socket( SOCKET_T so, bool oneshot, SL_EVENT_ID eid, bool isreset ) {
 	if ( m_fd == -1 ) return false;
+
+	ldebug << "is going to monitor socket " << so << " for event " << sl_event_name(eid) << lend;
 #if SL_TARGET_LINUX
 
 	// Socket must be nonblocking

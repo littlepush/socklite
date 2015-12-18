@@ -27,6 +27,7 @@
 
 #include "socket.h"
 #include "poller.h"
+#include <unordered_map>
 
 // The socket event handler
 //typedef void (*sl_socket_event_handler)(sl_event);
@@ -49,9 +50,11 @@ public:
     // Return an empty handler set
     static sl_handler_set empty_handler();
     typedef map<SOCKET_T, sl_handler_set>   shsmap_t;       // SOCKET_HANDLER_SET_MAP_TYPE
+    typedef unordered_map<uint64_t, bool>   pemap_t;        // Pending Events Map Type
 protected:
     mutable mutex           handler_mutex_;
     shsmap_t                event_map_;
+    pemap_t                 pending_map_;
 
     // Protected constructure
     sl_events();
@@ -77,7 +80,9 @@ protected:
     void _internal_remove_worker();
     void _internal_worker();
 
-    sl_handler_set _find_handler(SOCKET_T so);
+    sl_socket_event_handler _replace_handler(SOCKET_T so, SL_EVENT_ID eid, sl_socket_event_handler h);
+    sl_socket_event_handler _fetch_handler(SOCKET_T so, SL_EVENT_ID eid);
+    bool _has_handler(SOCKET_T so, SL_EVENT_ID eid);
 public:
     ~sl_events();
     // return the singleton instance of sl_events

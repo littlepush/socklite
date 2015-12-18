@@ -54,6 +54,9 @@ enum SL_EVENT_ID {
     SL_EVENT_ALL            = 0x1F
 };
 
+// Convert the EVENT_ID to string
+const string sl_event_name(SL_EVENT_ID eid);
+
 typedef struct tag_sl_event {
     SOCKET_T                so;
     SOCKET_T                source;
@@ -61,6 +64,9 @@ typedef struct tag_sl_event {
     int                     socktype;
     struct sockaddr_in      address;    // For UDP socket usage.
 } sl_event;
+
+// Output of the event
+ostream & operator << (ostream &os, const sl_event & e);
 
 class sl_poller
 {
