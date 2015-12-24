@@ -278,6 +278,7 @@ void _raw_internal_tcp_socket_connect(
                 << peer << " on tcp socket: "
                 << _tso << ", " << ::strerror( _error ) 
             << lend;
+            sl_events::server().add_tcpevent(_tso, SL_EVENT_FAILED);
         } else {
             // Monitor the socket, the poller will invoke on_connect 
             // when the socket is connected or failed.
