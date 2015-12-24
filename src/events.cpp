@@ -140,7 +140,7 @@ void sl_events::_internal_runloop()
                 if ( _eit->second.flags.eventid == 0 ) continue;    // the socket is still alve, but not active.
                 auto _epit = event_unprocessed_map_.find(_eit->first);
                 if ( _epit == end(event_unprocessed_map_) ) continue;
-                linfo << "re-monitor on socket " << _eit->first << " for event " << sl_event_name(_eit->second.flags.eventid) << lend;
+                //linfo << "re-monitor on socket " << _eit->first << " for event " << sl_event_name(_eit->second.flags.eventid) << lend;
                 sl_poller::server().monitor_socket(_eit->first, true, _eit->second.flags.eventid, _eit->second.flags.timeout);
             }
         } while ( false );
@@ -203,7 +203,7 @@ void sl_events::_internal_worker()
     sl_socket_event_handler _handler;
     while ( this_thread_is_running() ) {
         if ( !events_pool_.wait_for(milliseconds(10), [&](sl_event&& e){
-            // ldebug << "processing " << e << lend;
+            //ldebug << "processing " << e << lend;
             _local_event = e;
             SOCKET_T _s = ((_local_event.event == SL_EVENT_ACCEPT) && 
                             (_local_event.socktype == IPPROTO_TCP)) ? 

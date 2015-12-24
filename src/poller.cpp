@@ -350,7 +350,7 @@ bool sl_poller::monitor_socket(
 		// ldebug << "socket " << so << " will monitor infinitvie" << lend;
 		m_timeout_map[so] = 0;
 	} else {
-		// ldebug << "socket " << so << " monitor on event " << sl_event_name(eid) << ", will time out after " << timedout << " seconds" << lend;
+		//ldebug << "socket " << so << " monitor on event " << sl_event_name(eid) << ", will time out after " << timedout << " seconds" << lend;
 		m_timeout_map[so] = (time(NULL) + timedout);
 	}
 	return true;

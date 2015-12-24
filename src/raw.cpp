@@ -553,6 +553,7 @@ void _raw_internal_tcp_socket_write(sl_event e)
             _sswpkt->sent_size += _retval;
         }
     }
+    // ldebug << "sent data size " << _sswpkt->sent_size << " to socket " << e.so << lend;
 
     // Check if has pending data
     do {
@@ -670,7 +671,7 @@ bool sl_tcp_socket_read(
             _leftspace -= _retCode;
             if ( _leftspace > 0 ) {
                 // Unfull
-                buffer.resize(_retCode);
+                buffer.resize(_received);
                 return true;
             } else {
                 // The buffer is full, try to double the buffer and try again
@@ -993,7 +994,7 @@ bool sl_udp_socket_read(
             _leftspace -= _retCode;
             if ( _leftspace > 0 ) {
                 // Unfull
-                buffer.resize(_retCode);
+                buffer.resize(_received);
                 return true;
             } else {
                 // The buffer is full, try to double the buffer and try again

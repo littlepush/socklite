@@ -27,40 +27,6 @@ void dump_iplist(const string& domain, const vector<sl_ip> & iplist) {
         linfo << domain << " get A record: " << ip << lend;
     }
 }
-/*
-void tcp_redirect_callback(sl_event e, sl_event re) {
-    if ( e.event == SL_EVENT_FAILED ) {
-        linfo << "socket has disconnected" << lend;
-        sl_socket_close(e.so);
-        sl_socket_close(re.so);
-        return;
-    }
-    string _buf;
-    if ( !sl_tcp_socket_read(e.so, _buf, 512000) ) {
-        sl_socket_close(e.so);
-        sl_socket_close(re.so);
-        return;
-    }
-    if ( !sl_tcp_socket_send(re.so, _buf, [e](sl_event re){
-        if ( re.event == SL_EVENT_FAILED ) {
-            sl_socket_close(e.so);
-            sl_socket_close(re.so);
-            return;
-        }
-        if ( !sl_tcp_socket_monitor(e.so, [re](sl_event e){
-            tcp_redirect_callback(e, re);
-        }) ) {
-            sl_socket_close(e.so);
-            sl_socket_close(re.so);
-            return;
-        }
-    })) {
-        sl_socket_close(e.so);
-        sl_socket_close(re.so);
-        return;
-    }
-}
-*/
 
 void tcp_redirect_callback(sl_event from_event, sl_event to_event) {
     string _pkt;
@@ -68,10 +34,10 @@ void tcp_redirect_callback(sl_event from_event, sl_event to_event) {
         sl_events::server().add_tcpevent(from_event.so, SL_EVENT_FAILED);
         return;
     }
-    ldebug << "we get incoming data from socket " << from_event.so << ", will send to socket " << to_event.so << lend;
+    //ldebug << "we get incoming data from socket " << from_event.so << ", will send to socket " << to_event.so << ", length: " << _pkt.size() << lend;
     sl_tcp_socket_send(to_event.so, _pkt, [from_event](sl_event to_event) {
-        ldebug << "the data has been sent from socket " << from_event.so << " to socket " << to_event.so << lend;
-        ldebug << "we now going to re-monitor the socket " << from_event.so << lend;
+        //ldebug << "the data has been sent from socket " << from_event.so << " to socket " << to_event.so << lend;
+        //ldebug << "we now going to re-monitor the socket " << from_event.so << lend;
         sl_socket_monitor(from_event.so, 30, bind(tcp_redirect_callback, placeholders::_1, to_event));
     });
 }
@@ -169,7 +135,7 @@ int main( int argc, char * argv[] )
         );
     });
     sl_tcp_socket_listen(sl_peerinfo(INADDR_ANY, 58423), [](sl_event e){
-        sl_tcp_socket_connect(_socks5, "106.187.97.108", 58422, 5, [e](sl_event re) {
+        sl_tcp_socket_connect(_socks5, "106.187.97.108", 38422, 5, [e](sl_event re) {
             if ( re.event != SL_EVENT_CONNECT ) {
                 sl_socket_close(e.so);
                 return;
@@ -197,41 +163,6 @@ int main( int argc, char * argv[] )
             sl_socket_monitor(re.so, 30, bind(tcp_redirect_callback, placeholders::_1, e));
         });
     });
-/*
-    SOCKET_T _rso = sl_tcp_socket_init();
-    sl_tcp_socket_listen(_rso, sl_peerinfo(INADDR_ANY, 58423), [&](sl_event e){
-        SOCKET_T _redirect_so = sl_tcp_socket_init();
-        ldebug << "receive a socket: " << e.so << ", create a redirect socket: " << _redirect_so << lend;
-        sl_tcp_socket_connect(_redirect_so, sl_peerinfo(_socks5), "106.187.97.108", 38422, [e](sl_event re){
-            if ( re.event == SL_EVENT_FAILED ) {
-                lerror << "cannot connect to 106.187.97.108:38422" << lend;
-                sl_socket_close(re.so);
-                sl_socket_close(e.so);
-                return;
-            }
-            ldebug << "did connect to 106.187.97.108:38422 via proxy use socket " << re.so << lend;
-            if ( !sl_tcp_socket_monitor(e.so, [re](sl_event e){
-                tcp_redirect_callback(e, re);
-            }, true) ) {
-                sl_socket_close(e.so);
-                sl_socket_close(re.so);
-                return;
-            }
-            if ( !sl_tcp_socket_monitor(re.so, [e](sl_event re){
-                tcp_redirect_callback(re, e);
-            }) ) {
-                sl_socket_close(e.so);
-                sl_socket_close(re.so);
-                return;
-            }
-        }) ? [](){
-            linfo << "the connect return true, wait for the next runloop to monitor the result" << lend;
-        }() : [e]() {
-            lerror << "failed to create a connection to the redirected server." << lend;
-            sl_socket_close(e.so);
-        }();
-    });
-*/
     return 0;
 }
 
