@@ -356,7 +356,7 @@ void sl_tcp_socket_connect(
 {
     shared_ptr<sl_peerinfo> _psocks5 = make_shared<sl_peerinfo>(socks5);
     if ( socks5 ) {
-        ldebug << "try to connect to " << host << ":" << port << " via socks proxy " << socks5 << lend;
+        //ldebug << "try to connect to " << host << ":" << port << " via socks proxy " << socks5 << lend;
         _raw_internal_tcp_socket_connect(socks5, timedout, [=](sl_event e) {
             if ( e.event != SL_EVENT_CONNECT ) {
                 lerror << "the socks5 proxy " << *_psocks5 << " cannot be connected" << lend;
@@ -364,7 +364,7 @@ void sl_tcp_socket_connect(
                 return;
             }
 
-            ldebug << "did build a connection to the socks proxy on socket " << e.so << lend;
+            //ldebug << "did build a connection to the socks proxy on socket " << e.so << lend;
 
             sl_socket_bind_event_failed(e.so, [=](sl_event e) {
                 lerror << "failed to connect to socks5 proxy" << lend;
@@ -383,14 +383,14 @@ void sl_tcp_socket_connect(
                 if ( callback ) callback(e); 
                 return;
             }
-            ldebug << "did send version checking to proxy" << lend;
+            //ldebug << "did send version checking to proxy" << lend;
             sl_socket_monitor(e.so, timedout, [=](sl_event e){
                 if ( e.event != SL_EVENT_DATA ) {
                     if ( callback ) callback(e);
                     return;
                 }
 
-                ldebug << "proxy response for the version checking" << lend;
+                //ldebug << "proxy response for the version checking" << lend;
 
                 string _pkt;
                 if ( !sl_tcp_socket_read(e.so, _pkt) ) {
@@ -430,7 +430,7 @@ void sl_tcp_socket_connect(
                     e.event = SL_EVENT_FAILED; callback(e); return;
                 }
 
-                ldebug << "did send connection request to the proxy" << lend;
+                //ldebug << "did send connection request to the proxy" << lend;
                 // Wait for the socks5 server's response
                 sl_socket_monitor(e.so, timedout, [=](sl_event e) {
                     if ( e.event != SL_EVENT_DATA ) {
@@ -475,7 +475,7 @@ void sl_tcp_socket_connect(
                         if ( callback ) callback(e); 
                         return;
                     }
-                    ldebug << "now we build the connection to the peer server via current proxy" << lend;
+                    //ldebug << "now we build the connection to the peer server via current proxy" << lend;
                     e.event = SL_EVENT_CONNECT;
                     if ( callback ) callback(e);
                 });
