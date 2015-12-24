@@ -1073,7 +1073,9 @@ void _raw_internal_async_gethostname_udp(
     auto _errorfp = [=](sl_event e) {
         // Assert the event status
         assert(e.event == SL_EVENT_FAILED || e.event == SL_EVENT_TIMEOUT);
-
+        if ( e.event == SL_EVENT_TIMEOUT ) {
+            sl_socket_close(e.so);
+        }
         // Go next server
         _raw_internal_async_gethostname_udp(
             move(query_pkt), 
@@ -1148,7 +1150,6 @@ void _raw_internal_async_gethostname_tcp(
     auto _errorfp = [=](sl_event e) {
         // Assert the event status
         assert(e.event == SL_EVENT_FAILED || e.event == SL_EVENT_TIMEOUT);
-
         // Go next server
         if ( socks5 ) {
             _raw_internal_async_gethostname_tcp(
