@@ -174,19 +174,19 @@ using sl_auth_method = function<bool(const string &, const string &)>;
 void sl_socks5_set_supported_method(sl_methods m);
 
 // Hand shake the new connection, if return nomethod, than should close the connection
-sl_methods sl_socks5_handshake_handler(SOCKET_T so);
+sl_methods sl_socks5_handshake_handler(const string &req_pkt, string &resp_pkt);
 
 // Auth the connection by username and password
-bool sl_socks5_auth_by_username(SOCKET_T so, sl_auth_method auth);
+bool sl_socks5_auth_by_username(const string &req_pkt, string &resp_pkt, sl_auth_method auth);
 
 // Try to get the connection info
-bool sl_socks5_get_connect_info(SOCKET_T so, string &addr, uint16_t& port);
+bool sl_socks5_get_connect_info(const string &req_pkt, string &addr, uint16_t& port);
 
 // Failed to connect to peer
-void sl_socks5_failed_connect_to_peer(SOCKET_T so, sl_socks5rep rep);
+void sl_socks5_generate_failed_connect_to_peer(sl_socks5rep rep, string &resp_pkt);
 
 // After connect to peer, send a response to the incoming connection
-void sl_socks5_did_connect_to_peer(SOCKET_T so, uint32_t addr, uint16_t port);
+void sl_socks5_generate_did_connect_to_peer(const sl_peerinfo &peer, string &resp_pkt);
 
 #endif // socklite.socks5.h
 

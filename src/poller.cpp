@@ -23,12 +23,13 @@
 #include "poller.h"
 
 // Convert the EVENT_ID to string
-const string sl_event_name(SL_EVENT_ID eid)
+const string sl_event_name(uint32_t eid)
 {
 	static string _accept = " SL_EVENT_ACCEPT ";
 	static string _data = " SL_EVENT_DATA|SL_EVENT_READ ";
 	static string _failed = " SL_EVENT_FAILED ";
 	static string _write = " SL_EVENT_WRITE|SL_EVENT_CONNECT ";
+	static string _timeout = " SL_EVENT_TIMEOUT ";
 	static string _unknow = " Unknow Event ";
 
 	string _name;
@@ -36,6 +37,7 @@ const string sl_event_name(SL_EVENT_ID eid)
 	if ( eid & SL_EVENT_DATA ) _name += _data;
 	if ( eid & SL_EVENT_FAILED ) _name += _failed;
 	if ( eid & SL_EVENT_WRITE ) _name += _write;
+	if ( eid & SL_EVENT_TIMEOUT ) _name += _timeout;
 	if ( _name.size() == 0 ) return _unknow;
 	return _name;
 }
@@ -48,8 +50,24 @@ ostream & operator << (ostream &os, const sl_event & e)
     return os;
 }
 
+// Create a failed or timedout event structure object
+sl_event sl_event_make_failed(SOCKET_T so) {
+	sl_event _e;
+	memset(&_e, 0, sizeof(_e));
+	_e.so = so;
+	_e.event = SL_EVENT_FAILED;
+	return _e;
+}
+sl_event sl_event_make_timeout(SOCKET_T so) {
+	sl_event _e;
+	memset(&_e, 0, sizeof(_e));
+	_e.so = so;
+	_e.event = SL_EVENT_TIMEOUT;
+	return _e;
+}
+
 sl_poller::sl_poller()
-	:m_fd(-1), m_events(NULL), m_runloop_status(false), m_runloop_ret(0)
+	:m_fd(-1), m_events(NULL)
 {
 #if SL_TARGET_LINUX
 	m_fd = epoll_create1(0);
@@ -103,48 +121,19 @@ bool sl_poller::bind_tcp_server( SOCKET_T so ) {
 	return (_retval != -1);
 }
 
-bool sl_poller::bind_udp_server( SOCKET_T so ) {
-#if SL_TARGET_LINUX
-	auto _uit = m_udp_svr_map.find(so);
-	bool _is_new_bind = (_uit == end(m_udp_svr_map));
-#endif
-	// Reset the flag
-	m_udp_svr_map[so] = true;
-	int _retval = 0;
-#if SL_TARGET_LINUX
-	struct epoll_event _e;
-	_e.data.fd = so;
-	_e.events = EPOLLIN | EPOLLET | EPOLLONESHOT;
-	if ( _is_new_bind ) {
-		_retval = epoll_ctl( m_fd, EPOLL_CTL_ADD, so, &_e );
-	} else {
-		_retval = epoll_ctl( m_fd, EPOLL_CTL_MOD, so, &_e );
-	}
-#elif SL_TARGET_MAC
-	struct kevent _e;
-	EV_SET(&_e, so, EVFILT_READ, EV_ADD | EV_ONESHOT, 0, 0, NULL);
-	_retval = kevent(m_fd, &_e, 1, NULL, 0, NULL);
-#endif
-	if ( _retval == -1 ) {
-		lerror << "failed to bind and monitor the udp server socket: " << ::strerror(errno) << lend;
-#if SL_TARGET_LINUX
-		if ( _is_new_bind ) {
-			m_udp_svr_map.erase(so);
-		}
-#endif
-	}
-	return (_retval != -1);
-}
-
 size_t sl_poller::fetch_events( sl_poller::earray &events, unsigned int timedout ) {
 	if ( m_fd == -1 ) return 0;
 	int _count = 0;
 #if SL_TARGET_LINUX
-	_count = epoll_wait( m_fd, m_events, CO_MAX_SO_EVENTS, timedout );
+	do {
+		_count = epoll_wait( m_fd, m_events, CO_MAX_SO_EVENTS, timedout );
+	} while ( _count < 0 && errno == EINTR );
 #elif SL_TARGET_MAC
 	struct timespec _ts = { timedout / 1000, timedout % 1000 * 1000 * 1000 };
 	_count = kevent(m_fd, NULL, 0, m_events, CO_MAX_SO_EVENTS, &_ts);
 #endif
+
+	time_t _now_time = time(NULL);
 
 	for ( int i = 0; i < _count; ++i ) {
 #if SL_TARGET_LINUX
@@ -165,6 +154,11 @@ size_t sl_poller::fetch_events( sl_poller::earray &events, unsigned int timedout
 #endif
 			_e.event = SL_EVENT_FAILED;
 			events.push_back(_e);
+
+			// Remove the timeout info
+			lock_guard<mutex> _(m_timeout_mutex);
+			m_timeout_map.erase(_e.so);
+
 			continue;
 		}
 #if SL_TARGET_LINUX
@@ -199,24 +193,6 @@ size_t sl_poller::fetch_events( sl_poller::earray &events, unsigned int timedout
 				}
 			}
 		}
-#if SL_TARGET_LINUX
-		else if ( m_udp_svr_map.find(_pe->data.fd) != m_udp_svr_map.end() ) {
-			_e.so = _pe->data.fd;
-#elif SL_TARGET_MAC
-		else if ( m_udp_svr_map.find(_pe->ident) != m_udp_svr_map.end() ) {
-			_e.so = _pe->ident;
-#endif
-			_e.source = _e.so;
-			_e.socktype = IPPROTO_UDP;
-
-			// Get the peer info, but remind the data in the queue.
-			_e.event = SL_EVENT_DATA;
-			socklen_t _l = sizeof(_e.address);
-			::recvfrom( _e.so, NULL, 0, MSG_PEEK,
-            	(struct sockaddr *)&_e.address, &_l);
-
-			events.push_back(_e);
-		}
 		else {
 			// R/W
 #if SL_TARGET_LINUX
@@ -244,6 +220,12 @@ size_t sl_poller::fetch_events( sl_poller::earray &events, unsigned int timedout
 				if ( _pe->events & EPOLLIN ) {
 					_e.event = SL_EVENT_DATA;
 					// ldebug << "did get r/w event for socket: " << _e.so << ", event: " << sl_event_name(_e.event) << lend;
+					if ( _e.socktype == IPPROTO_UDP ) {
+						// Try to fetch the address info
+						socklen_t _l = sizeof(_e.address);
+						::recvfrom( _e.so, NULL, 0, MSG_PEEK,
+			            	(struct sockaddr *)&_e.address, &_l);
+					}
 					events.push_back(_e);
 				}
 				if ( _pe->events & EPOLLOUT ) {
@@ -252,8 +234,18 @@ size_t sl_poller::fetch_events( sl_poller::earray &events, unsigned int timedout
 					events.push_back(_e);
 				}
 #elif SL_TARGET_MAC
-				if ( _pe->filter == EVFILT_READ ) _e.event = SL_EVENT_DATA;
-				else _e.event = SL_EVENT_WRITE;
+				if ( _pe->filter == EVFILT_READ ) {
+					_e.event = SL_EVENT_DATA;
+					if ( _e.socktype == IPPROTO_UDP ) {
+						// Try to fetch the address info
+						socklen_t _l = sizeof(_e.address);
+						::recvfrom( _e.so, NULL, 0, MSG_PEEK,
+			            	(struct sockaddr *)&_e.address, &_l);
+					}
+				}
+				else {
+					_e.event = SL_EVENT_WRITE;
+				}
 				events.push_back(_e);
 				// ldebug << "did get r/w event for socket: " << _e.so << ", event: " << sl_event_name(_e.event) << lend;
 #endif
@@ -263,12 +255,37 @@ size_t sl_poller::fetch_events( sl_poller::earray &events, unsigned int timedout
 				// ldebug << "did get r/w event for socket: " << _e.so << ", event: " << sl_event_name(_e.event) << lend;
 			}
 
+			lock_guard<mutex> _(m_timeout_mutex);
+			m_timeout_map.erase(_e.so);
 		}
 	}
+
+	vector<SOCKET_T> _timeout_list;
+	lock_guard<mutex> _(m_timeout_mutex);
+	for ( auto _tit = begin(m_timeout_map); _tit != end(m_timeout_map); ++_tit ) {
+		if ( _tit->second > 0 && _tit->second < _now_time ) {
+			_timeout_list.push_back(_tit->first);
+			// ldebug << "socket " << _tit->first << " runs time out in poller" << lend;
+		}
+	}
+
+	for ( auto _so : _timeout_list ) {
+		sl_event _e;
+		_e.so = _so;
+		_e.event = SL_EVENT_TIMEOUT;
+		events.push_back(_e);
+		m_timeout_map.erase(_so);
+	}
+
 	return events.size();
 }
 
-bool sl_poller::monitor_socket( SOCKET_T so, bool oneshot, SL_EVENT_ID eid, bool isreset ) {
+bool sl_poller::monitor_socket( 
+	SOCKET_T so, 
+	bool oneshot, 
+	uint32_t eid, 
+	uint32_t timedout
+) {
 	if ( m_fd == -1 ) return false;
 
 	// ldebug << "is going to monitor socket " << so << " for event " << sl_event_name(eid) << lend;
@@ -283,13 +300,14 @@ bool sl_poller::monitor_socket( SOCKET_T so, bool oneshot, SL_EVENT_ID eid, bool
 	_ee.events = EPOLLET;
 	if ( eid & SL_EVENT_DATA ) _ee.events |= EPOLLIN;
 	if ( eid & SL_EVENT_WRITE ) _ee.events |= EPOLLOUT;
+
+	// In default the operation should be ADD, and we
+	// will try to use ADD and MOD both.
 	int _op = EPOLL_CTL_ADD;
 	if ( oneshot ) {
 		_ee.events |= EPOLLONESHOT;
-		if ( isreset ) _op = EPOLL_CTL_MOD;
 	}
 	if ( -1 == epoll_ctl( m_fd, _op, so, &_ee ) ) {
-		lerror << "failed to monitor the socket " << so << ": " << ::strerror(errno) << lend;
 		if ( errno == EEXIST ) {
 			if ( -1 == epoll_ctl( m_fd, EPOLL_CTL_MOD, so, &_ee ) ) {
 				lerror << "failed to monitor the socket " << so << ": " << ::strerror(errno) << lend;
@@ -301,6 +319,7 @@ bool sl_poller::monitor_socket( SOCKET_T so, bool oneshot, SL_EVENT_ID eid, bool
 				return false;
 			}
 		} else {
+			lerror << "failed to monitor the socket " << so << ": " << ::strerror(errno) << lend;
 			return false;
 		}
 	}
@@ -325,6 +344,15 @@ bool sl_poller::monitor_socket( SOCKET_T so, bool oneshot, SL_EVENT_ID eid, bool
 		}
 	}
 #endif
+
+	lock_guard<mutex> _(m_timeout_mutex);
+	if ( timedout == 0 ) {
+		// ldebug << "socket " << so << " will monitor infinitvie" << lend;
+		m_timeout_map[so] = 0;
+	} else {
+		// ldebug << "socket " << so << " monitor on event " << sl_event_name(eid) << ", will time out after " << timedout << " seconds" << lend;
+		m_timeout_map[so] = (time(NULL) + timedout);
+	}
 	return true;
 }
 

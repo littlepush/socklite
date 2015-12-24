@@ -38,6 +38,7 @@
 
 #include <vector>
 #include <map>
+#include <unordered_map>
 
 #define CO_MAX_SO_EVENTS		1024
 
@@ -49,14 +50,28 @@ enum SL_EVENT_ID {
     SL_EVENT_FAILED         = 0x04,
     SL_EVENT_CONNECT        = 0x08,
     SL_EVENT_WRITE          = 0x08,     // Write and connect is the same
+    SL_EVENT_TIMEOUT        = 0x10,
 
     SL_EVENT_DEFAULT        = (SL_EVENT_ACCEPT | SL_EVENT_DATA | SL_EVENT_FAILED),
     SL_EVENT_ALL            = 0x1F
 };
 
 // Convert the EVENT_ID to string
-const string sl_event_name(SL_EVENT_ID eid);
+const string sl_event_name(uint32_t eid);
 
+/*
+    The event structure for a system epoll/kqueue to set the info
+    of a socket event.
+
+    @so: the socket you should act some operator on it.
+    @source: the tcp listening socket which accept current so, 
+        in udp socket or other events of tcp socket, source will
+        be an INVALIDATE_SOCKET
+    @event: the event current socket get.
+    @socktype: IPPROTO_TCP or IPPROTO_UDP
+    @address: the address info of a udp socket when it gets some
+        incoming data, otherwise it will be undefined.
+*/
 typedef struct tag_sl_event {
     SOCKET_T                so;
     SOCKET_T                source;
@@ -65,12 +80,28 @@ typedef struct tag_sl_event {
     struct sockaddr_in      address;    // For UDP socket usage.
 } sl_event;
 
-// Output of the event
+/*
+    Output of the event
+    The format will be:
+        "event SL_EVENT_xxx SL_EVENT_xxx for xxx socket <so>"
+*/
 ostream & operator << (ostream &os, const sl_event & e);
 
+// Create a failed or timedout event structure object
+sl_event sl_event_make_failed(SOCKET_T so = INVALIDATE_SOCKET);
+sl_event sl_event_make_timeout(SOCKET_T so = INVALIDATE_SOCKET);
+
+/*
+    Epoll|Kqueue Manager Class
+    The class is a singleton class, the whole system should only
+    create one epoll|kqueue file descriptor to monitor all sockets
+    or file descriptors
+
+*/
 class sl_poller
 {
 public:
+    // Event list type.
 	typedef std::vector<sl_event>	earray;
 protected:
 	int 				m_fd;
@@ -80,20 +111,21 @@ protected:
 	struct kevent		*m_events;
 #endif
 
-	std::map<SOCKET_T, bool>	m_tcp_svr_map;
-	std::map<SOCKET_T, bool>	m_udp_svr_map;
+    // TCP Listening Socket Map
+	unordered_map<SOCKET_T, bool>       m_tcp_svr_map;
 
-    bool                m_runloop_status;
-    int                 m_runloop_ret;
+    // Timeout Info
+    unordered_map<SOCKET_T, time_t>     m_timeout_map;
+    mutex                               m_timeout_mutex;
 
 protected:
+    // Cannot create a poller object, it should be a Singleton instance
 	sl_poller();
 public:
 	~sl_poller();
         
 	// Bind the server side socket
 	bool bind_tcp_server( SOCKET_T so );
-	bool bind_udp_server( SOCKET_T so );
 
 	// Try to fetch new events(Only return SL_EVENT_DEFAULT)
 	size_t fetch_events( earray &events,  unsigned int timedout = 1000 );
@@ -101,7 +133,13 @@ public:
 	// Start to monitor a socket hander
 	// In default, the poller will maintain the socket infinite, if
 	// `oneshot` is true, then will add the ONESHOT flag
-	bool monitor_socket( SOCKET_T so, bool oneshot = false, SL_EVENT_ID eid = SL_EVENT_DEFAULT, bool isreset = false );
+    // Default time out of a socket in epoll/kqueue will be 30 seconds
+	bool monitor_socket(  
+        SOCKET_T so, 
+        bool oneshot = false, 
+        uint32_t eid = SL_EVENT_DEFAULT, 
+        uint32_t timedout = 30 
+    );
 
 	// Singleton Poller Item
 	static sl_poller &server();

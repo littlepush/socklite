@@ -21,7 +21,6 @@
 */
 
 #include "socks5.h"
-#include "tcpsocket.h"
 
 static bool sl_supported_method[3] = {false, false, false};
 
@@ -39,16 +38,11 @@ string sl_socks5_get_string(const char *buffer, uint32_t length) {
 	return _result;
 }
 
-sl_methods sl_socks5_handshake_handler(SOCKET_T so) {
-	sl_tcpsocket _wsrc(so);
-	string _buffer;
-
-	// Try to read the handshake packet
-	if ( (_wsrc.read_data(_buffer) & SO_READ_DONE) == 0 ) return sl_method_nomethod;
-	sl_socks5_handshake_request *_req = (sl_socks5_handshake_request *)_buffer.data();
+sl_methods sl_socks5_handshake_handler(const string &req_pkt, string &resp_pkt) {
+	sl_socks5_handshake_request *_req = (sl_socks5_handshake_request *)req_pkt.data();
 	sl_socks5_handshake_response _resp(sl_method_nomethod);
 
-	const char *_methods = _buffer.data() + sizeof(sl_socks5_handshake_request);
+	const char *_methods = req_pkt.data() + sizeof(sl_socks5_handshake_request);
 	for ( uint8_t i = 0; i < _req->nmethods; ++i ) {
 		if ( _methods[i] == sl_method_noauth ) {
 			if ( sl_supported_method[sl_method_noauth] ) {
@@ -64,19 +58,15 @@ sl_methods sl_socks5_handshake_handler(SOCKET_T so) {
 	}
 
 	string _respdata((char *)&_resp, sizeof(_resp));
-	_wsrc.write_data(_respdata);
+	resp_pkt.swap(_respdata);
 	return (sl_methods)_resp.method;
 }
 
-bool sl_socks5_auth_by_username(SOCKET_T so, sl_auth_method auth) {
-	sl_tcpsocket _wsrc(so);
-	string _buffer;
+bool sl_socks5_auth_by_username(const string &req_pkt, string &resp_pkt, sl_auth_method auth) {
+	if ( req_pkt.data()[0] != 1 ) return false;		// version error
 
-	if ( (_wsrc.read_data(_buffer) & SO_READ_DONE) == 0 ) return false;
-	if ( _buffer.data()[0] != 1 ) return false;		// version error
-
-	const char *_b = _buffer.data() + 1;
-	uint32_t _l = _buffer.size() - 1;
+	const char *_b = req_pkt.data() + 1;
+	uint32_t _l = req_pkt.size() - 1;
 	string _username = sl_socks5_get_string(_b, _l);
 	if ( _username.size() == 0 ) return false;
 	_b += (_username.size() + sizeof(uint8_t));
@@ -87,16 +77,12 @@ bool sl_socks5_auth_by_username(SOCKET_T so, sl_auth_method auth) {
 	uint8_t _result = (auth(_username, _password) ? 0 : 1);
 	char _resp[2] = {1, (char)_result};
 	string _respdata(_resp, 2);
-	_wsrc.write_data(_respdata);
+	resp_pkt.swap(_respdata);
 	return _result == 0;
 }
 
-bool sl_socks5_get_connect_info(SOCKET_T so, string &addr, uint16_t& port) {
-	sl_tcpsocket _wsrc(so);
-	string _buffer;
-
-	if ( (_wsrc.read_data(_buffer) & SO_READ_DONE) == 0 ) return false;
-	sl_socks5_connect_request *_req = (sl_socks5_connect_request *)_buffer.data();
+bool sl_socks5_get_connect_info(const string &req_pkt, string &addr, uint16_t& port) {
+	sl_socks5_connect_request *_req = (sl_socks5_connect_request *)req_pkt.data();
 	sl_socks5_ipv4_response _resp(0, 0);
 
 	for ( int _dummy = 0; _dummy == 0; _dummy++ ) {
@@ -104,7 +90,7 @@ bool sl_socks5_get_connect_info(SOCKET_T so, string &addr, uint16_t& port) {
 			_resp.rep = sl_socks5rep_notsupport;
 			break;
 		}
-		const char *_data = _buffer.data() + sizeof(sl_socks5_connect_request);
+		const char *_data = req_pkt.data() + sizeof(sl_socks5_connect_request);
 		if ( _req->atyp == sl_socks5atyp_ipv4 ) {
 			uint32_t _ip = *(uint32_t *)_data;
 			network_int_to_ipaddress(_ip, addr);
@@ -112,7 +98,7 @@ bool sl_socks5_get_connect_info(SOCKET_T so, string &addr, uint16_t& port) {
 			break;
 		}
 		if ( _req->atyp == sl_socks5atyp_dname ) {
-			uint32_t _l = _buffer.size() - sizeof(sl_socks5_connect_request);
+			uint32_t _l = req_pkt.size() - sizeof(sl_socks5_connect_request);
 			addr = sl_socks5_get_string(_data, _l);
 			if ( addr.size() == 0 ) {
 				_resp.rep = sl_socks5rep_erroraddress;
@@ -128,20 +114,16 @@ bool sl_socks5_get_connect_info(SOCKET_T so, string &addr, uint16_t& port) {
 	return _resp.rep == sl_socks5rep_successed;
 }
 
-void sl_socks5_failed_connect_to_peer(SOCKET_T so, sl_socks5rep rep) {
-	sl_tcpsocket _wsrc(so);
-
+void sl_socks5_generate_failed_connect_to_peer(sl_socks5rep rep, string &resp_pkt) {
 	sl_socks5_ipv4_response _resp(0, 0);
 	_resp.rep = rep;
 	string _respstring((char *)&_resp, sizeof(_resp));
-	_wsrc.write_data(_respstring);
+	resp_pkt.swap(_respstring);
 }
-void sl_socks5_did_connect_to_peer(SOCKET_T so, uint32_t addr, uint16_t port) {
-	sl_tcpsocket _wsrc(so);
-	
-	sl_socks5_ipv4_response _resp(addr, htons(port));
+void sl_socks5_generate_did_connect_to_peer(const sl_peerinfo &peer, string &resp_pkt) {
+	sl_socks5_ipv4_response _resp(peer.ipaddress, htons(peer.port_number));
 	string _respstring((char *)&_resp, sizeof(_resp));
-	_wsrc.write_data(_respstring);
+	resp_pkt.swap(_respstring);
 }
 
 // socks5.cpp
