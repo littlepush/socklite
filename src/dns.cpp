@@ -463,7 +463,7 @@ void sl_dns_packet::set_A_records(const vector<sl_ip> & a_records)
 
         // RDATA
         uint32_t *_prdata = (uint32_t *)(&packet_data_[0] + _boffset);
-        *_prdata = htonl((uint32_t)_ip);
+        *_prdata = _ip;
         _boffset += sizeof(uint32_t);
     }
 }
