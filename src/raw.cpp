@@ -1042,14 +1042,14 @@ void sl_udp_socket_listen(
 vector<sl_peerinfo> _resolv_list;
 
 void _raw_internal_async_gethostname_udp(
-    const string&& query_pkt,
+    const sl_dns_packet && query_pkt,
     const vector<sl_peerinfo>&& resolv_list,
     size_t use_index,
     async_dns_handler fp
 );
 
 void _raw_internal_async_gethostname_tcp(
-    const string&& query_pkt,
+    const sl_dns_packet && query_pkt,
     const vector<sl_peerinfo>&& resolv_list,
     size_t use_index,
     const sl_peerinfo& socks5,
@@ -1057,7 +1057,7 @@ void _raw_internal_async_gethostname_tcp(
 );
 
 void _raw_internal_async_gethostname_udp(
-    const string&& query_pkt,
+    const sl_dns_packet && query_pkt,
     const vector<sl_peerinfo>&& resolv_list,
     size_t use_index,
     async_dns_handler fp
@@ -1107,17 +1107,11 @@ void _raw_internal_async_gethostname_udp(
                 return;
             }
 
-            const clnd_dns_packet *_pheader = (const clnd_dns_packet *)_incoming_pkt.c_str();
-            if ( _pheader->get_resp_code() == dns_rcode_noerr ) {
-                vector<uint32_t> _a_recs;
-                string _qdomain;
-                dns_get_a_records(_incoming_pkt.c_str(), _incoming_pkt.size(), _qdomain, _a_recs);
-                vector<sl_ip> _retval;
-                for ( auto _a : _a_recs ) {
-                    _retval.push_back(sl_ip(_a));
-                }
+            sl_dns_packet _dnspkt(move(_incoming_pkt));
+            if ( _dnspkt.get_resp_code() == sl_dns_rcode_noerr ){
+                vector<sl_ip> _retval(move(_dnspkt.get_A_records()));
                 fp( _retval );
-            } else if ( _pheader->get_is_truncation() ) {
+            } else if ( _dnspkt.get_is_truncation() ) {
                 // TRUNC flag get, try to use tcp
                 _raw_internal_async_gethostname_tcp(
                     move(query_pkt), move(resolv_list), use_index, sl_peerinfo::nan(), fp
@@ -1133,7 +1127,7 @@ void _raw_internal_async_gethostname_udp(
 }
 
 void _raw_internal_async_gethostname_tcp(
-    const string&& query_pkt,
+    const sl_dns_packet && query_pkt,
     const vector<sl_peerinfo>&& resolv_list,
     size_t use_index,
     const sl_peerinfo& socks5,
@@ -1165,7 +1159,11 @@ void _raw_internal_async_gethostname_tcp(
 
     sl_peerinfo _resolv_peer = move(resolv_list[use_index]);
 
+    if ( socks5 ) {
+        ldebug << "prepare to connect to socks5 proxy " << socks5 << " to query the dns" << lend;
+    }
     sl_tcp_socket_connect(socks5, _resolv_peer.ipaddress, _resolv_peer.port_number, 3, [=](sl_event e) {
+        ldebug << "tcp connected in dns request retrun the event " << e << lend;
         if ( e.event != SL_EVENT_CONNECT ) {
             _errorfp(e);
             return;
@@ -1177,12 +1175,7 @@ void _raw_internal_async_gethostname_tcp(
             sl_socket_close(e.so);
             _errorfp(e);
         });
-
-        // Create the TCP redirect packet
-        string _tpkt;
-        dns_generate_tcp_redirect_packet(move(query_pkt), _tpkt);
-
-        sl_tcp_socket_send(e.so, _tpkt, [=](sl_event e){
+        sl_tcp_socket_send(e.so, query_pkt.to_tcp_packet(), [=](sl_event e){
             sl_socket_monitor(e.so, 1, [=](sl_event e){
                 // Read incoming
                 string _tcp_incoming_pkt;
@@ -1195,18 +1188,9 @@ void _raw_internal_async_gethostname_tcp(
                     _errorfp(e);
                     return;
                 }
-                string _incoming_pkt;
-                dns_generate_udp_response_packet_from_tcp(_tcp_incoming_pkt, _incoming_pkt);
-
-                const clnd_dns_packet *_pheader = (const clnd_dns_packet *)_incoming_pkt.c_str();
-                if ( _pheader->get_resp_code() == dns_rcode_noerr ) {
-                    vector<uint32_t> _a_recs;
-                    string _qdomain;
-                    dns_get_a_records(_incoming_pkt.c_str(), _incoming_pkt.size(), _qdomain, _a_recs);
-                    vector<sl_ip> _retval;
-                    for ( auto _a : _a_recs ) {
-                        _retval.push_back(sl_ip(_a));
-                    }
+                sl_dns_packet _dnspkt(move(_tcp_incoming_pkt), true);
+                if ( _dnspkt.get_resp_code() == sl_dns_rcode_noerr ) {
+                    vector<sl_ip> _retval(move(_dnspkt.get_A_records()));
                     fp( _retval );
                 } else {
                     // Failed to get the dns result
@@ -1245,9 +1229,13 @@ void sl_async_gethostname(const string& host, async_dns_handler fp)
             // ldebug << "resolv get dns: " << _pi << lend;
         }
     }
-    string _qpkt;
-    dns_generate_query_packet(host, _qpkt);
-    _raw_internal_async_gethostname_udp(move(_qpkt), move(_resolv_list), 0, fp);
+    auto _now = system_clock::now();
+    auto _time_point = _now.time_since_epoch();
+    _time_point -= duration_cast<seconds>(_time_point); 
+    auto _ms = static_cast<unsigned>(_time_point / milliseconds(1));
+
+    sl_dns_packet _pkt((uint16_t)_ms, host);
+    _raw_internal_async_gethostname_udp(move(_pkt), move(_resolv_list), 0, fp);
 }
 /*
     Try to get the dns result async via specified name servers
@@ -1258,9 +1246,13 @@ void sl_async_gethostname(
     async_dns_handler fp
 )
 {
-    string _qpkt;
-    dns_generate_query_packet(host, _qpkt);
-    _raw_internal_async_gethostname_udp(move(_qpkt), move(nameserver_list), 0, fp);
+    auto _now = system_clock::now();
+    auto _time_point = _now.time_since_epoch();
+    _time_point -= duration_cast<seconds>(_time_point); 
+    auto _ms = static_cast<unsigned>(_time_point / milliseconds(1));
+
+    sl_dns_packet _pkt((uint16_t)_ms, host);
+    _raw_internal_async_gethostname_udp(move(_pkt), move(nameserver_list), 0, fp);
 }
 
 /*
@@ -1274,12 +1266,16 @@ void sl_async_gethostname(
     async_dns_handler fp
 )
 {
-    string _qpkt;
-    dns_generate_query_packet(host, _qpkt);
+    auto _now = system_clock::now();
+    auto _time_point = _now.time_since_epoch();
+    _time_point -= duration_cast<seconds>(_time_point); 
+    auto _ms = static_cast<unsigned>(_time_point / milliseconds(1));
+
+    sl_dns_packet _pkt((uint16_t)_ms, host);
     if ( socks5 ) {
-        _raw_internal_async_gethostname_tcp(move(_qpkt), move(nameserver_list), 0, socks5, fp);
+        _raw_internal_async_gethostname_tcp(move(_pkt), move(nameserver_list), 0, socks5, fp);
     } else {
-        _raw_internal_async_gethostname_udp(move(_qpkt), move(nameserver_list), 0, fp);
+        _raw_internal_async_gethostname_udp(move(_pkt), move(nameserver_list), 0, fp);
     }
 }
 /*

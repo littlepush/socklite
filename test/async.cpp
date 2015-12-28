@@ -90,21 +90,14 @@ int main( int argc, char * argv[] )
     sl_udp_socket_listen(_ulso, [](sl_event e) {
         string _dnspkt;
         sl_udp_socket_read(e.so, e.address, _dnspkt);
-        string _domain;
-        dns_get_domain(_dnspkt.c_str(), _dnspkt.size(), _domain);
-        const clnd_dns_packet *_pkt = (const clnd_dns_packet *)_dnspkt.c_str();
-        uint16_t _tid = _pkt->get_transaction_id();
+        sl_dns_packet _dpkt(_dnspkt);
+
         sl_peerinfo _pi(e.address.sin_addr.s_addr, ntohs(e.address.sin_port));
-        linfo << "get request from " << _pi << " to query domain " << _domain << lend;
-        sl_async_gethostname(_domain, [=](const vector<sl_ip> & iplist){
-            string _resp;
-            vector<uint32_t> _iplist;
-            for ( auto ip : iplist ) {
-                _iplist.push_back((uint32_t)ip);
-            }
-            dns_generate_a_records_resp(_domain, _tid, _iplist, _resp);
-            //sl_udp_socket_send(e.so, _resp, _pi);
-            sl_udp_socket_send(e.so, _pi, _resp);
+        linfo << "get request from " << _pi << " to query domain " << _dpkt.get_query_domain() << lend;
+        sl_async_gethostname(_dpkt.get_query_domain(), [=](const vector<sl_ip> & iplist){
+            sl_dns_packet _rpkt(_dpkt);
+            _rpkt.set_A_records(iplist);
+            sl_udp_socket_send(e.so, _pi, _rpkt);
         });
     });
 
@@ -112,25 +105,18 @@ int main( int argc, char * argv[] )
     sl_udp_socket_listen(_upso, [](sl_event e) {
         string _dnspkt;
         sl_udp_socket_read(e.so, e.address, _dnspkt);
-        string _domain;
-        dns_get_domain(_dnspkt.c_str(), _dnspkt.size(), _domain);
-        const clnd_dns_packet *_pkt = (const clnd_dns_packet *)_dnspkt.c_str();
-        uint16_t _tid = _pkt->get_transaction_id();
+        sl_dns_packet _dpkt(_dnspkt);
         sl_peerinfo _pi(e.address.sin_addr.s_addr, ntohs(e.address.sin_port));
-        linfo << "get request from " << _pi << " to query domain " << _domain << lend;
+        linfo << "get request from " << _pi << " to query domain " << _dpkt.get_query_domain() << lend;
         sl_async_gethostname(
-            _domain, 
+            _dpkt.get_query_domain(), 
             {sl_peerinfo("8.8.8.8:53"), sl_peerinfo("8.8.4.4:53")},
             _socks5,
             [=](const vector<sl_ip> & iplist){
-                string _resp;
-                vector<uint32_t> _iplist;
-                for ( auto ip : iplist ) {
-                    _iplist.push_back((uint32_t)ip);
-                }
-                dns_generate_a_records_resp(_domain, _tid, _iplist, _resp);
+                sl_dns_packet _rpkt(_dpkt);
+                _rpkt.set_A_records(iplist);
                 //sl_udp_socket_send(e.so, _resp, _pi);
-                sl_udp_socket_send(e.so, _pi, _resp);
+                sl_udp_socket_send(e.so, _pi, _rpkt);
             }
         );
     });

@@ -69,163 +69,19 @@
 
 #ifdef SOCK_LITE_INTEGRATION_DNS
 
-bool clnd_dns_packet::clnd_dns_support_recursive = true;
-uint16_t clnd_dns_packet::clnd_dns_tid = 1;
-
-// DNS Package class
-clnd_dns_packet::clnd_dns_packet( const char *data, uint16_t len )
-{
-    memcpy((void *)&transaction_id_, data, sizeof(clnd_dns_packet));
-}
-
-clnd_dns_packet::clnd_dns_packet( bool is_query, dns_opcode opcode, uint16_t qd_count)
-    : transaction_id_(clnd_dns_tid++), flags_(0), 
-    qd_count_( htons(qd_count) ), 
-    an_count_(0), ns_count_(0), ar_count_(0) 
-{
-    uint16_t _h_flag = ntohs(flags_);
-
-    // qr
-    if ( !is_query ) _h_flag |= 0x8000;
-    else _h_flag &= 0x7FFF;
-
-    // opcode
-    uint16_t _op_flag = (uint16_t)opcode;
-    _op_flag <<= 13;
-    _h_flag |= _op_flag;
-
-    // RD
-    _h_flag |= 0x0100;
-
-    flags_ = htons(_h_flag);
-};
-
-clnd_dns_packet::clnd_dns_packet( const clnd_dns_packet &rhs )
-    : transaction_id_(rhs.transaction_id_), flags_(rhs.flags_),
-    qd_count_(rhs.qd_count_), an_count_(rhs.an_count_),
-    ns_count_(rhs.ns_count_), ar_count_(rhs.ar_count_) { }
-
-clnd_dns_packet& clnd_dns_packet::operator= (const clnd_dns_packet &rhs )
-{
-    transaction_id_ = rhs.transaction_id_;
-    flags_ = rhs.flags_;
-    qd_count_ = rhs.qd_count_;
-    an_count_ = rhs.an_count_;
-    ns_count_ = rhs.ns_count_;
-    ar_count_ = rhs.ar_count_;
-    return *this;
-}
-size_t clnd_dns_packet::size() const { return sizeof(uint16_t) * 6; }
-const char *const clnd_dns_packet::pbuf() { return (char *)this; }
-
-clnd_dns_packet * clnd_dns_packet::dns_resp_packet(string &buf, dns_rcode rcode, uint16_t ancount) const {
-    buf.resize(sizeof(clnd_dns_packet));
-    //clnd_dns_packet *_presp = new ((void*)&buf[0]) clnd_dns_packet(*this);
-    clnd_dns_packet *_presp = (clnd_dns_packet *)&buf[0];
-    *_presp = *this;
-    uint16_t _h_flag = ntohs(flags_);
-    // Query -> Response
-    _h_flag |= 0x8000;
-    // RCode
-    (_h_flag &= 0xFFF0) |= ((uint16_t)rcode & 0x000F);
-    _presp->flags_ = htons(_h_flag);
-    // Answer Count
-    _presp->an_count_ = htons(ancount);
-    return _presp;
-}
-
-clnd_dns_packet * clnd_dns_packet::dns_truncation_packet( string &buf ) const {
-    buf.resize(sizeof(clnd_dns_packet));
-    clnd_dns_packet *_presp = (clnd_dns_packet *)&buf[0];
-    *_presp = *this;
-    uint16_t _h_flag = ntohs(flags_);
-    // Query -> Response
-    _h_flag |= 0x8000;
-    // Truncation
-    _h_flag |= 0x0200;
-    _presp->flags_ = htons(_h_flag);
-    return _presp;
-}
-
-uint16_t clnd_dns_packet::get_transaction_id() const 
-{
-    return ntohs(transaction_id_);
-}
-bool clnd_dns_packet::get_is_query_request() const
-{
-    uint16_t _h_flag = ntohs(flags_);
-    return (_h_flag & 0x8000) == 0;
-}
-bool clnd_dns_packet::get_is_response_request() const
-{
-    uint16_t _h_flag = ntohs(flags_);
-    return (_h_flag & 0x8000) > 0;
-}
-dns_opcode clnd_dns_packet::get_opcode() const
-{
-    uint16_t _h_flag = ntohs(flags_);
-    return (dns_opcode)((_h_flag >>= 13) & 0x000F);
-}
-bool clnd_dns_packet::get_is_authoritative() const
-{
-    uint16_t _h_flag = ntohs(flags_);
-    return (_h_flag & 0x0400) > 0;
-}
-void clnd_dns_packet::set_is_authoritative(bool auth)
-{
-    uint16_t _h_flag = ntohs(flags_);
-    if ( auth ) {
-        _h_flag |= 0x0400;
-    } else {
-        _h_flag &= 0xFBFF;
+// Get the formated domain in the dns packet.
+// The domain "www.google.com", will be "\3www\6google\3com\0".
+int _dns_get_format_domain( const char *data, string &domain ) {
+    domain.clear();
+    for ( ;; ) {
+        uint8_t _l = data[0];
+        if ( _l == 0 ) break;
+        data++;
+        if ( domain.size() > 0 ) domain += ".";
+        domain.append( data, _l );
+        data += _l;
     }
-    flags_ = htons(_h_flag);
-}
-bool clnd_dns_packet::get_is_truncation() const
-{
-    uint16_t _h_flag = ntohs(flags_);
-    return (_h_flag & 0x0200) > 0;
-}
-bool clnd_dns_packet::get_is_recursive_desired() const
-{
-    uint16_t _h_flag = ntohs(flags_);
-    return (_h_flag & 0x0100) > 0;
-}
-void clnd_dns_packet::set_is_recursive_desired(bool rd)
-{
-    uint16_t _h_flag = ntohs(flags_);
-    if ( rd ) {
-        _h_flag |= 0x0100;
-    } else {
-        _h_flag &= 0xFEFF;
-    }
-    flags_ = htons(_h_flag);
-}
-bool clnd_dns_packet::get_is_recursive_available() const
-{
-    uint16_t _h_flag = ntohs(flags_);
-    return (_h_flag & 0x0080) > 0;
-}
-dns_rcode clnd_dns_packet::get_resp_code() const
-{
-    uint16_t _h_flag = ntohs(flags_);
-    return (dns_rcode)(_h_flag & 0x000F);
-}
-uint16_t clnd_dns_packet::get_qd_count() const
-{
-    return ntohs(qd_count_);
-}
-uint16_t clnd_dns_packet::get_an_count() const
-{
-    return ntohs(an_count_);
-}
-uint16_t clnd_dns_packet::get_ns_count() const
-{
-    return ntohs(ns_count_);
-}
-uint16_t clnd_dns_packet::get_ar_count() const
-{
-    return ntohs(ar_count_);
+    return domain.size() + 2;
 }
 
 // DNS Method
@@ -244,19 +100,7 @@ void _dns_format_domain(const string &dname, string &buf) {
     _buf[0] = '\0';
 }
 
-int _dns_get_format_domain( const char *data, string &domain ) {
-    domain.clear();
-    for ( ;; ) {
-        uint8_t _l = data[0];
-        if ( _l == 0 ) break;
-        data++;
-        if ( domain.size() > 0 ) domain += ".";
-        domain.append( data, _l );
-        data += _l;
-    }
-    return domain.size() + 2;
-}
-
+// support the offset in the dns packet
 int _dns_get_format_domain( const char *begin_of_domain, const char *begin_of_pkt, string &domain ) {
     domain.clear();
     int _readsize = 0;
@@ -289,233 +133,472 @@ int _dns_get_format_domain( const char *begin_of_domain, const char *begin_of_pk
     return _readsize;
 }
 
-// Get the domain from the dns querying packet.
-// The query domain seg will store the domain in the following format:
-// [length:1Byte][component][length:1Byte][component]...
-int dns_get_domain( const char *pkt, unsigned int len, std::string &domain )
+sl_dns_packet::sl_dns_packet()
 {
-    // the packet is too small
-    if ( len < sizeof(clnd_dns_packet) ) return -1;
-    const char *_pDomain = pkt + sizeof(clnd_dns_packet);
-    _dns_get_format_domain(_pDomain, domain);
-    return 0;
+    packet_data_.append((size_t)packet_header_size, '\0');
+}
+sl_dns_packet::sl_dns_packet(const string& packet, bool is_tcp_packet)
+{
+    // Force to resize to minimal header size
+    if ( packet.size() < packet_header_size ) {
+        packet_data_.append((size_t)packet_header_size, '\0');
+    } else {
+        const char *_data = packet.c_str();
+        size_t _length = packet.size();
+        if ( is_tcp_packet ) {
+            _data += sizeof(uint16_t);
+            _length -= sizeof(uint16_t);
+        }
+        packet_data_.append(_data, _length);
+    }
+}
+sl_dns_packet::sl_dns_packet(const sl_dns_packet& rhs) 
+: packet_data_(rhs.packet_data_) { }
+
+sl_dns_packet::sl_dns_packet(const sl_dns_packet&& rrhs)
+: packet_data_(move(rrhs.packet_data_)) { }
+
+sl_dns_packet::sl_dns_packet(uint16_t trans_id, const string& query_domain)
+{
+    packet_data_.resize(packet_header_size);
+    this->set_transaction_id(trans_id);
+    this->set_is_query_request(true);
+    this->set_is_recursive_desired(true);
+    this->set_opcode(sl_dns_opcode_standard);
+    this->set_query_domain(query_domain);
 }
 
-int dns_generate_query_packet( const string &query_name, string& buffer, dns_qtype qtype ) 
+// Transaction ID
+uint16_t sl_dns_packet::get_transaction_id() const
 {
+    return ntohs(*(const uint16_t *)(packet_data_.c_str()));
+}
+void sl_dns_packet::set_transaction_id(uint16_t tid)
+{
+    ((uint16_t *)&(packet_data_[0]))[0] = htons(tid);
+}
+
+// Request Type
+bool sl_dns_packet::get_is_query_request() const
+{
+    uint16_t _h_flag = ntohs(((const uint16_t *)(packet_data_.c_str()))[1]);
+    return (_h_flag & 0x8000) == 0;
+}
+bool sl_dns_packet::get_is_response_request() const
+{
+    uint16_t _h_flag = ntohs(((const uint16_t *)(packet_data_.c_str()))[1]);
+    return (_h_flag & 0x8000) > 0;
+}
+void sl_dns_packet::set_is_query_request(bool isqr)
+{
+    uint16_t _h_flag = ntohs(((const uint16_t *)(packet_data_.c_str()))[1]);
+    if ( isqr ) {
+        _h_flag &= 0x7FFF;
+    } else {
+        _h_flag |= 0x8000;
+    }
+    ((uint16_t *)&(packet_data_[0]))[1] = htons(_h_flag);
+}
+
+// Op Code
+sl_dns_opcode sl_dns_packet::get_opcode() const
+{
+    uint16_t _h_flag = ntohs(((const uint16_t *)(packet_data_.c_str()))[1]);
+    return (sl_dns_opcode)((_h_flag >> 11) & 0x000F);
+}
+void sl_dns_packet::set_opcode(sl_dns_opcode opcode)
+{
+    uint16_t _h_flag = ntohs(((const uint16_t *)(packet_data_.c_str()))[1]);
+
+    // Setup the mask
+    uint16_t _mask = (((opcode & 0x000F) << 11) | 0x87FF);  // 1000 0111 1111 1111
+    _h_flag &= _mask;
+
+    ((uint16_t *)&(packet_data_[0]))[1] = htons(_h_flag);
+}
+
+// AA
+bool sl_dns_packet::get_is_authoritative() const
+{
+    uint16_t _h_flag = ntohs(((const uint16_t *)(packet_data_.c_str()))[1]);
+    return (_h_flag & 0x0400) > 0;
+}
+void sl_dns_packet::set_is_authoritative(bool auth)
+{
+    uint16_t _h_flag = ntohs(((const uint16_t *)(packet_data_.c_str()))[1]);
+
+    if ( auth ) {
+        _h_flag |= 0x0400;
+    } else {
+        _h_flag &= 0xFBFF;
+    }
+
+    ((uint16_t *)&(packet_data_[0]))[1] = htons(_h_flag);
+}
+
+// Truncation
+bool sl_dns_packet::get_is_truncation() const
+{
+    uint16_t _h_flag = ntohs(((const uint16_t *)(packet_data_.c_str()))[1]);
+    return (_h_flag & 0x0200) > 0;
+}
+
+void sl_dns_packet::set_is_truncation(bool trunc)
+{
+    uint16_t _h_flag = ntohs(((const uint16_t *)(packet_data_.c_str()))[1]);
+
+    if ( trunc ) {
+        _h_flag |= 0x0200;
+    } else {
+        _h_flag &= 0xFDFF;
+    }
+
+    ((uint16_t *)&(packet_data_[0]))[1] = htons(_h_flag);
+}
+
+// Recursive
+bool sl_dns_packet::get_is_recursive_desired() const
+{
+    uint16_t _h_flag = ntohs(((const uint16_t *)(packet_data_.c_str()))[1]);
+    return (_h_flag & 0x0100) > 0;
+}
+void sl_dns_packet::set_is_recursive_desired(bool rd)
+{
+    uint16_t _h_flag = ntohs(((const uint16_t *)(packet_data_.c_str()))[1]);
+    if ( rd ) {
+        _h_flag |= 0x0100;
+    } else {
+        _h_flag &= 0xFEFF;
+    }
+    ((uint16_t *)&(packet_data_[0]))[1] = htons(_h_flag);
+}
+
+// Recursive available
+bool sl_dns_packet::get_is_recursive_available() const
+{
+    uint16_t _h_flag = ntohs(((const uint16_t *)(packet_data_.c_str()))[1]);
+    return (_h_flag & 0x0080) > 0;
+}
+void sl_dns_packet::set_is_recursive_available(bool recursive)
+{
+    uint16_t _h_flag = ntohs(((const uint16_t *)(packet_data_.c_str()))[1]);
+
+    if ( recursive ) {
+        _h_flag |= 0x0080;
+    } else {
+        _h_flag &= 0xFF7F;
+    }
+
+    ((uint16_t *)&(packet_data_[0]))[1] = htons(_h_flag);
+}
+
+sl_dns_rcode sl_dns_packet::get_resp_code() const
+{
+    uint16_t _h_flag = ntohs(((const uint16_t *)(packet_data_.c_str()))[1]);
+    return (sl_dns_rcode)(_h_flag & 0x000F);
+}
+void sl_dns_packet::set_resp_code(sl_dns_rcode rcode)
+{
+    uint16_t _h_flag = ntohs(((const uint16_t *)(packet_data_.c_str()))[1]);
+    _h_flag |= (rcode & 0x000F);
+    ((uint16_t *)&(packet_data_[0]))[1] = htons(_h_flag);
+}
+
+uint16_t sl_dns_packet::get_qd_count() const
+{
+    return ntohs(((const uint16_t *)(packet_data_.c_str()))[2]);
+}
+uint16_t sl_dns_packet::get_an_count() const
+{
+    return ntohs(((const uint16_t *)(packet_data_.c_str()))[3]);
+}
+uint16_t sl_dns_packet::get_ns_count() const
+{
+    return ntohs(((const uint16_t *)(packet_data_.c_str()))[4]);
+}
+uint16_t sl_dns_packet::get_ar_count() const
+{
+    return ntohs(((const uint16_t *)(packet_data_.c_str()))[5]);
+}
+
+// Operators
+sl_dns_packet& sl_dns_packet::operator = (const sl_dns_packet& rhs)
+{
+    packet_data_ = rhs.packet_data_;
+    return *this;
+}
+sl_dns_packet& sl_dns_packet::operator = (const sl_dns_packet&& rrhs)
+{
+    packet_data_ = move(rrhs.packet_data_);
+    return *this;
+}
+
+const string sl_dns_packet::get_query_domain() const
+{
+    string _domain;
+    if ( packet_data_.size() > (packet_header_size + 2 + 2) ) {
+        _dns_get_format_domain(packet_data_.c_str() + packet_header_size, _domain);
+    }
+    return _domain;
+}
+void sl_dns_packet::set_query_domain(const string& domain, sl_dns_qtype qtype, sl_dns_qclass qclass)
+{
+    // Format the query domain
     string _fdomain;
-    _dns_format_domain(query_name, _fdomain);
+    _dns_format_domain(domain, _fdomain);
 
-    // Buffer
-    buffer.resize(sizeof(clnd_dns_packet) + _fdomain.size() + 2 * sizeof(uint8_t) + 2 * sizeof(uint8_t));
-    // Header
-    //clnd_dns_packet *_pquery = (clnd_dns_packet*)&buffer[0]);
-    clnd_dns_packet _query_pkt;
-    memcpy(&buffer[0], _query_pkt.pbuf(), _query_pkt.size());
-    // Domain
-    char *_data_area = (char *)&buffer[0] + sizeof(clnd_dns_packet);
-    memcpy(_data_area, _fdomain.c_str(), _fdomain.size());
-    // Flags
-    _data_area += _fdomain.size();
-    uint16_t *_flag_area = (uint16_t *)_data_area;
-    _flag_area[0] = htons(qtype);
-    _flag_area[1] = htons(dns_qclass_in);
-    return buffer.size();
+    // Copy the domain
+    packet_data_.resize(packet_header_size + _fdomain.size() + 2 * sizeof(uint8_t) + 2 * sizeof(uint8_t));
+    memcpy(&packet_data_[packet_header_size], _fdomain.c_str(), _fdomain.size());
+
+    // Set type and class
+    uint16_t *_f_area = ((uint16_t *)(&packet_data_[packet_header_size + _fdomain.size()]));
+    _f_area[0] = htons(qtype);
+    _f_area[1] = htons(qclass);
+
+    // Update QD count
+    ((uint16_t *)&(packet_data_[0]))[2] = htons(1);
 }
 
-int dns_generate_tc_packet( const string& incoming_pkt, string& buffer ) 
+// A-Records
+const vector<sl_ip> sl_dns_packet::get_A_records() const
 {
-    clnd_dns_packet _ipkt(incoming_pkt.c_str(), sizeof(clnd_dns_packet));
-    _ipkt.dns_truncation_packet(buffer);
-    buffer.resize(incoming_pkt.size());
-    memcpy((char *)&buffer[0] + sizeof(clnd_dns_packet), 
-        incoming_pkt.c_str() + sizeof(clnd_dns_packet),
-        incoming_pkt.size() - sizeof(clnd_dns_packet));
-    return buffer.size();
-}
+    string _qdomain(this->get_query_domain());
+    vector<sl_ip> _result_list;
 
-int dns_generate_tcp_redirect_packet( const string &incoming_pkt, string &buffer )
-{
-    buffer.resize(incoming_pkt.size() + sizeof(uint16_t));
-    uint16_t *_plen = (uint16_t *)&buffer[0];
-    *_plen = htons(incoming_pkt.size());
-    memcpy((char *)&buffer[2], incoming_pkt.c_str(), incoming_pkt.size());
-    return buffer.size();
-}
+    if ( _qdomain.size() == 0 ) return _result_list;
 
-int dns_generate_udp_response_packet_from_tcp( const string &incoming_pkt, string &buffer )
-{
-    buffer.resize(incoming_pkt.size() - sizeof(uint16_t));
-    memcpy((char *)&buffer[0], incoming_pkt.c_str() + sizeof(uint16_t), incoming_pkt.size() - sizeof(uint16_t));
-    return buffer.size();
-}
+    // Get the data offset
+    // Header Size + Domain Size(+2) + QType + QClass
+    const char *_pbuf = (
+        packet_data_.c_str() +      // Start point
+        packet_header_size +        // Header Fixed Size
+        (_qdomain.size() + 2) +     // Domain Size + 2(start length, and \0)
+        2 +                         // QType
+        2                           // QClass
+        );
 
-void dns_generate_a_records_resp( const char *pkt, unsigned int len, vector<uint32_t> ipaddress, string &buf )
+    uint16_t _an = this->get_an_count();
+    for ( uint16_t i = 0; i < _an; ++i ) {
+        string _domain;
+        int _dsize = _dns_get_format_domain(_pbuf, packet_data_.c_str(), _domain);
+        _pbuf += _dsize;
+
+        // Get the record type
+        uint16_t _type = ntohs(((uint16_t *)_pbuf)[0]);
+        _pbuf += sizeof(uint16_t);
+
+        bool _is_a_records = ((sl_dns_qtype)_type == sl_dns_qtype_host);
+
+        // Skip QClass
+        _pbuf += sizeof(uint16_t);
+        // Skip TTL
+        _pbuf += sizeof(uint32_t);
+
+        // Get RData Length
+        uint16_t _rlen = ntohs(*(uint16_t *)_pbuf);
+        _pbuf += sizeof(uint16_t);
+
+        if ( _is_a_records ) {
+            uint32_t _a_rec = *(uint32_t *)_pbuf;
+            _result_list.emplace_back(sl_ip(_a_rec));
+        }
+        _pbuf += _rlen;
+    }
+    return _result_list;
+}
+void sl_dns_packet::set_A_records(const vector<sl_ip> & a_records)
 {
-    // Resp Header
-    clnd_dns_packet _ipkt(pkt, len);
-    _ipkt.dns_resp_packet(buf, dns_rcode_noerr, (uint16_t)ipaddress.size());
+    // Check if has set the query domain
+    if ( packet_data_.size() <= (packet_header_size + 2 + 2) ) return;
+    if ( a_records.size() == 0 ) return;
+
+    // This packet should be a response
+    this->set_is_query_request(false);
+
+    // Set the response code, no error
+    this->set_resp_code(sl_dns_rcode_noerr);
+
+    // Update answer count
+    ((uint16_t *)&(packet_data_[0]))[3] = htons(a_records.size() + this->get_an_count());
 
     // All length: incoming packet(header + query domain) + 2bytes domain-name(offset to query domain) + 
     // 2 bytes type(A) + 2 bytes class(IN) + 4 bytes(TTL) + 2bytes(r-length) + 4bytes(r-data, ipaddr)
-    buf.resize( len + (2 + 2 + 2 + 4 + 2 + 4) * ipaddress.size() );
-    // Query Domain
-    memcpy(
-        &buf[0] + sizeof(clnd_dns_packet), 
-        pkt + sizeof(clnd_dns_packet),
-        len - sizeof(clnd_dns_packet)
-        );
+    size_t _append_size = (2 + 2 + 2 + 4 + 2 + 4) * a_records.size();
+    size_t _current_size = packet_data_.size();
+    packet_data_.resize(_current_size + _append_size);
+
     // Offset
-    uint16_t _name_offset = sizeof(clnd_dns_packet);
+    uint16_t _name_offset = packet_header_size;
     _name_offset |= 0xC000;
     _name_offset = htons(_name_offset);
+
     // Generate the RR
-    size_t _boffset = len;
-    for ( auto _ip : ipaddress ) {
+    size_t _boffset = _current_size;
+    for ( auto _ip : a_records ) {
         // Name
-        uint16_t *_pname = (uint16_t *)(&buf[0] + _boffset);
+        uint16_t *_pname = (uint16_t *)(&packet_data_[0] + _boffset);
         *_pname = _name_offset;
         _boffset += sizeof(uint16_t);
 
         // Type
-        uint16_t *_ptype = (uint16_t *)(&buf[0] + _boffset);
-        *_ptype = htons((uint16_t)dns_qtype_host);
+        uint16_t *_ptype = (uint16_t *)(&packet_data_[0] + _boffset);
+        *_ptype = htons((uint16_t)sl_dns_qtype_host);
         _boffset += sizeof(uint16_t);
 
         // Class
-        uint16_t *_pclass = (uint16_t *)(&buf[0] + _boffset);
-        *_pclass = htons((uint16_t)dns_qclass_in);
+        uint16_t *_pclass = (uint16_t *)(&packet_data_[0] + _boffset);
+        *_pclass = htons((uint16_t)sl_dns_qclass_in);
         _boffset += sizeof(uint16_t);
 
         // TTL
-        uint32_t *_pttl = (uint32_t *)(&buf[0] + _boffset);
+        uint32_t *_pttl = (uint32_t *)(&packet_data_[0] + _boffset);
         *_pttl = htonl(30 * 60);    // 30 mins
         _boffset += sizeof(uint32_t);
 
         // RLENGTH
-        uint16_t *_prlen = (uint16_t *)(&buf[0] + _boffset);
+        uint16_t *_prlen = (uint16_t *)(&packet_data_[0] + _boffset);
         *_prlen = htons(4);
         _boffset += sizeof(uint16_t);
 
         // RDATA
-        uint32_t *_prdata = (uint32_t *)(&buf[0] + _boffset);
+        uint32_t *_prdata = (uint32_t *)(&packet_data_[0] + _boffset);
         *_prdata = htonl((uint32_t)_ip);
         _boffset += sizeof(uint32_t);
     }
 }
 
-// Generate response packet for specified query domain
-void dns_generate_a_records_resp( 
-    const string &query_domain, 
-    uint16_t trans_id, 
-    const vector<uint32_t> & iplist, 
-    string &buf )
+// Dump all C-Name Records in the dns packet
+const vector<string> sl_dns_packet::get_C_Names() const
 {
-    string _query_pkt;
-    dns_generate_query_packet(query_domain, _query_pkt);
-    clnd_dns_packet *_pkt = (clnd_dns_packet *)&_query_pkt[0];
-    uint16_t* _ptid = (uint16_t *)_pkt;
-    *_ptid = htons(trans_id);
-    dns_generate_a_records_resp(_query_pkt.c_str(), _query_pkt.size(), iplist, buf);
-}
+    string _qdomain(this->get_query_domain());
+    vector<string> _result_list;
 
-void dns_gnerate_cname_records_resp( const char *pkt, unsigned int len, vector<string> cnamelist, string &buf )
+    if ( _qdomain.size() == 0 ) return _result_list;
+
+    // Get the data offset
+    // Header Size + Domain Size(+2) + QType + QClass
+    const char *_pbuf = (
+        packet_data_.c_str() +      // Start point
+        packet_header_size +        // Header Fixed Size
+        (_qdomain.size() + 2) +     // Domain Size + 2(start length, and \0)
+        2 +                         // QType
+        2                           // QClass
+        );
+
+    uint16_t _an = this->get_an_count();
+    for ( uint16_t i = 0; i < _an; ++i ) {
+        string _domain;
+        int _dsize = _dns_get_format_domain(_pbuf, packet_data_.c_str(), _domain);
+        _pbuf += _dsize;
+
+        // Get the record type
+        uint16_t _type = ntohs(*(uint16_t *)_pbuf);
+        _pbuf += sizeof(uint16_t);
+
+        bool _is_c_name = ((sl_dns_qtype)_type == sl_dns_qtype_cname);
+
+        // Skip QClass
+        _pbuf += sizeof(uint16_t);
+        // Skip TTL
+        _pbuf += sizeof(uint32_t);
+
+        // Get RData Length
+        uint16_t _rlen = ntohs(*(uint16_t *)_pbuf);
+        _pbuf += sizeof(uint16_t);
+
+        if ( _is_c_name ) {
+            string _cname;
+            _dns_get_format_domain(_pbuf, packet_data_.c_str(), _cname);
+            _result_list.emplace_back(_cname);
+        }
+        _pbuf += _rlen;
+    }
+    return _result_list;
+}
+// Append C-Name to the end of the dns packet
+void sl_dns_packet::set_C_Names(const vector<string> & c_names)
 {
-    // Resp Header
-    clnd_dns_packet _ipkt(pkt, len);
-    _ipkt.dns_resp_packet(buf, dns_rcode_noerr, (uint16_t)cnamelist.size());
+    // Check if has set the query domain
+    if ( packet_data_.size() <= (packet_header_size + 2 + 2) ) return;
+    if ( c_names.size() == 0 ) return;
+
+    // This packet should be a response
+    this->set_is_query_request(false);
+
+    // Set the response code, no error
+    this->set_resp_code(sl_dns_rcode_noerr);
+
+    // Update answer count
+    ((uint16_t *)&(packet_data_[0]))[3] = htons(c_names.size() + this->get_an_count());
 
     // All length: incoming packet(header + query domain) + 2bytes domain-name(offset to query domain) + 
-    // 2 bytes type(CName) + 2 bytes class(IN) + 4 bytes(TTL) + 2bytes(r-length) + r-length bytes(r-data, cname)
-    //buf.resize( len + (2 + 2 + 2 + 4 + 2 + 4) * cnamelist.size() );
-    buf.resize(len);
-    // Query Domain
-    memcpy(
-        &buf[0] + sizeof(clnd_dns_packet), 
-        pkt + sizeof(clnd_dns_packet),
-        len - sizeof(clnd_dns_packet)
-        );
+    // 2 bytes type(A) + 2 bytes class(IN) + 4 bytes(TTL) + 2bytes(r-length) + n-bytes data
+    size_t _append_size = 0;
+    for ( auto &_name : c_names ) {
+        _append_size += (2 + 2 + 2 + 4 + 2 + _name.size());
+    }
+    size_t _current_size = packet_data_.size();
+    packet_data_.resize(_current_size + _append_size);
+
     // Offset
-    uint16_t _name_offset = sizeof(clnd_dns_packet);
+    uint16_t _name_offset = packet_header_size;
     _name_offset |= 0xC000;
     _name_offset = htons(_name_offset);
+
     // Generate the RR
-    size_t _boffset = len;
-    for ( auto _cname : cnamelist ) {
-        buf.resize(buf.size() + 2 + 2 + 2 + 4 + 2 + (_cname.size() + 2));
+    size_t _boffset = _current_size;
+    for ( auto _cname : c_names ) {
         // Name
-        uint16_t *_pname = (uint16_t *)(&buf[0] + _boffset);
+        uint16_t *_pname = (uint16_t *)(&packet_data_[0] + _boffset);
         *_pname = _name_offset;
         _boffset += sizeof(uint16_t);
 
         // Type
-        uint16_t *_ptype = (uint16_t *)(&buf[0] + _boffset);
-        *_ptype = htons((uint16_t)dns_qtype_cname);
+        uint16_t *_ptype = (uint16_t *)(&packet_data_[0] + _boffset);
+        *_ptype = htons((uint16_t)sl_dns_qtype_cname);
         _boffset += sizeof(uint16_t);
 
         // Class
-        uint16_t *_pclass = (uint16_t *)(&buf[0] + _boffset);
-        *_pclass = htons((uint16_t)dns_qclass_in);
+        uint16_t *_pclass = (uint16_t *)(&packet_data_[0] + _boffset);
+        *_pclass = htons((uint16_t)sl_dns_qclass_in);
         _boffset += sizeof(uint16_t);
 
         // TTL
-        uint32_t *_pttl = (uint32_t *)(&buf[0] + _boffset);
+        uint32_t *_pttl = (uint32_t *)(&packet_data_[0] + _boffset);
         *_pttl = htonl(30 * 60);    // 30 mins
         _boffset += sizeof(uint32_t);
 
         // RLENGTH
-        uint16_t *_prlen = (uint16_t *)(&buf[0] + _boffset);
+        uint16_t *_prlen = (uint16_t *)(&packet_data_[0] + _boffset);
         *_prlen = htons((uint16_t)_cname.size() + 2);
         _boffset += sizeof(uint16_t);
 
         // RDATA
         string _fcname;
         _dns_format_domain(_cname, _fcname);
-        char *_prdata = (char *)(&buf[0] + _boffset);
+        char *_prdata = (char *)(&packet_data_[0] + _boffset);
         memcpy(_prdata, _fcname.c_str(), _fcname.size());
         _boffset += _fcname.size();
     }
 }
 
-void dns_get_a_records( const char *pkt, unsigned int len, string &qdomain, vector<uint32_t> &a_records )
+// Size
+size_t sl_dns_packet::size() const { return packet_data_.size(); }
+// Buffer Point
+const char *const sl_dns_packet::pbuf() { return packet_data_.c_str(); }
+
+// String Cast
+sl_dns_packet::operator const string& () const { return packet_data_; }
+const string& sl_dns_packet::str() const { return packet_data_; }
+
+const string sl_dns_packet::to_tcp_packet() const
 {
-    clnd_dns_packet *_pheader = (clnd_dns_packet *)pkt;
-    const char *_pDomain = pkt + sizeof(clnd_dns_packet);
-    int _readsize = _dns_get_format_domain(_pDomain, pkt, qdomain);
-
-    // Begin Answer Point
-    const char *_pbuf = pkt + sizeof(clnd_dns_packet) + _readsize + 2 + 2; // type + class
-    uint16_t _an_count = _pheader->get_an_count();
-    for ( uint16_t i = 0; i < _an_count; ++i ) {
-        string _adomain;
-        int _asize = _dns_get_format_domain(_pbuf, pkt, _adomain);
-        _pbuf += _asize;
-
-        uint16_t _type = ntohs(*(uint16_t *)_pbuf);
-        _pbuf += sizeof(uint16_t);
-
-        bool _need_a_records = ((dns_qtype)_type == dns_qtype_host);
-        // skip class
-        _pbuf += sizeof(uint16_t);
-        // skip ttl
-        _pbuf += sizeof(uint32_t);
-        // length
-        uint16_t _rlen = ntohs(*(uint16_t *)_pbuf);
-        _pbuf += sizeof(uint16_t);
-
-        if ( _need_a_records ) {
-            uint32_t _a_rec = *(uint32_t *)_pbuf;
-            a_records.push_back(_a_rec);
-        }
-        _pbuf += _rlen;
-    }
-}
-
-// Check if is a query request
-bool dns_is_query(const char *pkt, unsigned int len)
-{
-    clnd_dns_packet *_pheader = (clnd_dns_packet *)pkt;
-    return _pheader->get_is_query_request();
+    // Initialize an empty packet
+    string _packet(2 + packet_data_.size(), '\0');
+    *((uint16_t *)&_packet[0]) = htons(packet_data_.size());
+    memcpy(&_packet[2], packet_data_.c_str(), packet_data_.size());
+    return _packet;
 }
 
 #endif
