@@ -13,7 +13,7 @@ echo "// Current Version: "$(./version) >> $fheader
 echo "" >> $fheader
 echo "#pragma once" >> $fheader
 
-headerfiles=("thread.hpp" "log.hpp" "string_format.hpp" "dns.h" "socket.h" "poller.h" "events.h" "socks5.h" "raw.h")
+headerfiles=("thread.hpp" "log.hpp" "string_format.hpp" "socket.h" "dns.h" "poller.h" "events.h" "socks5.h" "raw.h")
 
 function split_headerfile() {
 	fname=$1
@@ -45,7 +45,7 @@ echo "// Current Version: "$(./version) >> $fsource
 echo "" >> $fsource
 echo "#include \"socketlite.h\"" >> $fsource
 
-sourcefiles=("dns.cpp" "socket.cpp" "poller.cpp" "events.cpp" "socks5.cpp" "raw.cpp")
+sourcefiles=("socket.cpp" "dns.cpp" "poller.cpp" "events.cpp" "socks5.cpp" "raw.cpp")
 
 function split_sourcefile() {
 	fname=$1
