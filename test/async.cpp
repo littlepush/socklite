@@ -112,7 +112,7 @@ int main( int argc, char * argv[] )
         string _dnspkt;
         sl_udp_socket_read(e.so, e.address, _dnspkt);
         sl_dns_packet _dpkt(_dnspkt);
-        sl_async_redirect_dns_query(_dpkt, sl_peerinfo("119.29.29.29:53"), sl_peerinfo::nan(), [=](const sl_dns_packet& rpkt) {
+        sl_async_redirect_dns_query(_dpkt, sl_peerinfo("119.29.29.29:53"), sl_peerinfo::nan(), false, [=](const sl_dns_packet& rpkt) {
             dump_iplist(_dpkt.get_query_domain(), rpkt.get_A_records());
             sl_peerinfo _pi(e.address.sin_addr.s_addr, ntohs(e.address.sin_port));
             sl_udp_socket_send(e.so, _pi, rpkt);

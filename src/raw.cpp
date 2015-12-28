@@ -1326,6 +1326,7 @@ void sl_async_redirect_dns_query(
     const sl_dns_packet & dpkt,
     const sl_peerinfo &nameserver,
     const sl_peerinfo &socks5,
+    bool force_tcp,
     async_dns_redirector fp
 )
 {
@@ -1336,7 +1337,7 @@ void sl_async_redirect_dns_query(
         _dpkt.set_resp_code(sl_dns_rcode_server_failure);
         if ( fp ) fp(_dpkt);
     };
-    if ( socks5 ) {
+    if ( socks5 || force_tcp ) {
         sl_tcp_socket_connect(socks5, nameserver.ipaddress, nameserver.port_number, 5, [=](sl_event e) {
             if ( e.event != SL_EVENT_CONNECT ) {
                 // Failed

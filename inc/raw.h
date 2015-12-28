@@ -84,6 +84,7 @@ void sl_async_redirect_dns_query(
     const sl_dns_packet & dpkt,
     const sl_peerinfo &nameserver,
     const sl_peerinfo &socks5,
+    bool force_tcp,
     async_dns_redirector fp
 );
 
