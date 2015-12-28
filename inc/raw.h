@@ -71,6 +71,22 @@ void sl_async_gethostname(
     const sl_peerinfo &socks5, 
     async_dns_handler fp
 );
+
+// Async to redirect the dns query request.
+typedef std::function<void(const sl_dns_packet&)>       async_dns_redirector;
+
+/*!
+    Redirect a dns query packet to the specified nameserver, and return the 
+    dns response packet from the server.
+    If specified the socks5 proxy, will force to use tcp redirect.
+*/
+void sl_async_redirect_dns_query(
+    const sl_dns_packet & dpkt,
+    const sl_peerinfo &nameserver,
+    const sl_peerinfo &socks5,
+    async_dns_redirector fp
+);
+
 /*
     Bind Default Failed Handler for a Socket
 
@@ -215,6 +231,21 @@ SOCKET_T sl_tcp_socket_listen(
     In a BSD(like Mac OS X), will return 0.0.0.0:0
 */
 sl_peerinfo sl_tcp_get_original_dest(SOCKET_T tso);
+
+/*
+    Redirect a socket's data to another peer via socks5 proxy.
+
+    @Description
+    This method will continuously redirect the data between from_so and the 
+    peer side socket. 
+    When one side close or drop the connection, this method will close
+    both side's sockets.
+*/
+void sl_tcp_socket_redirect(
+    SOCKET_T from_so,
+    const sl_peerinfo& peer,
+    const sl_peerinfo& socks5
+);
 
 // UDP Methods
 

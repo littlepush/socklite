@@ -380,31 +380,23 @@ void sl_tcp_socket_connect(
             sl_socks5_noauth_request _req;
             // Exchange version info
             if (write(e.so, (char *)&_req, sizeof(_req)) < 0) {
-                e.event = SL_EVENT_FAILED; 
-                if ( callback ) callback(e); 
+                sl_events::server().add_tcpevent(e.so, SL_EVENT_FAILED);
                 return;
             }
             //ldebug << "did send version checking to proxy" << lend;
             sl_socket_monitor(e.so, timedout, [=](sl_event e){
-                if ( e.event != SL_EVENT_DATA ) {
-                    if ( callback ) callback(e);
-                    return;
-                }
-
                 //ldebug << "proxy response for the version checking" << lend;
 
                 string _pkt;
                 if ( !sl_tcp_socket_read(e.so, _pkt) ) {
-                    e.event = SL_EVENT_FAILED; 
-                    if ( callback ) callback(e);
+                    sl_events::server().add_tcpevent(e.so, SL_EVENT_FAILED);
                     return;
                 }
                 const sl_socks5_handshake_response* _resp = (const sl_socks5_handshake_response *)_pkt.c_str();
                 // This api is for no-auth proxy
                 if ( _resp->ver != 0x05 && _resp->method != sl_method_noauth ) {
                     lerror << "unsupported authentication method" << lend;
-                    e.event = SL_EVENT_FAILED;
-                    if ( callback ) callback(e);
+                    sl_events::server().add_tcpevent(e.so, SL_EVENT_FAILED);
                     return;
                 }
 
@@ -428,16 +420,13 @@ void sl_tcp_socket_connect(
                 _pos += sizeof(_host_port);
                 
                 if (write(e.so, _buffer, _pos) == -1) {
-                    e.event = SL_EVENT_FAILED; callback(e); return;
+                    sl_events::server().add_tcpevent(e.so, SL_EVENT_FAILED);
+                    return;
                 }
 
                 //ldebug << "did send connection request to the proxy" << lend;
                 // Wait for the socks5 server's response
                 sl_socket_monitor(e.so, timedout, [=](sl_event e) {
-                    if ( e.event != SL_EVENT_DATA ) {
-                        if ( callback ) callback(e); 
-                        return;
-                    }
                     /*
                      * The maximum size of the protocol message we are waiting for is 10
                      * bytes -- VER[1], REP[1], RSV[1], ATYP[1], BND.ADDR[4] and
@@ -449,8 +438,7 @@ void sl_tcp_socket_connect(
                      */
                     string _pkt;
                     if (!sl_tcp_socket_read(e.so, _pkt)) {
-                        e.event = SL_EVENT_FAILED; 
-                        if ( callback ) callback(e); 
+                        sl_events::server().add_tcpevent(e.so, SL_EVENT_FAILED);
                         return;
                     }
                     const sl_socks5_ipv4_response* _resp = (const sl_socks5_ipv4_response *)_pkt.c_str();
@@ -458,22 +446,19 @@ void sl_tcp_socket_connect(
                     /* Check the server's version. */
                     if ( _resp->ver != 0x05 ) {
                         lerror << "Unsupported SOCKS version: " << _resp->ver << lend;
-                        e.event = SL_EVENT_FAILED;
-                        if ( callback ) callback(e); 
+                        sl_events::server().add_tcpevent(e.so, SL_EVENT_FAILED);
                         return;
                     }
                     if (_resp->rep != sl_socks5rep_successed) {
                         lerror << sl_socks5msg((sl_socks5rep)_resp->rep) << lend;
-                        e.event = SL_EVENT_FAILED;
-                        if ( callback ) callback(e); 
+                        sl_events::server().add_tcpevent(e.so, SL_EVENT_FAILED);
                         return;
                     }
 
                     /* Check ATYP */
                     if ( _resp->atyp != sl_socks5atyp_ipv4 ) {
                         lerror << "ssh-socks5-proxy: Address type not supported: " << _resp->atyp << lend;
-                        e.event = SL_EVENT_FAILED;
-                        if ( callback ) callback(e); 
+                        sl_events::server().add_tcpevent(e.so, SL_EVENT_FAILED);
                         return;
                     }
                     //ldebug << "now we build the connection to the peer server via current proxy" << lend;
@@ -543,8 +528,10 @@ void _raw_internal_tcp_socket_write(sl_event e)
                 lerror
                     << "failed to send data on tcp socket: " << e.so 
                     << ", err(" << errno << "): " << ::strerror(errno) << lend;
-                e.event = SL_EVENT_FAILED;
-                if ( _sswpkt->callback ) _sswpkt->callback(e);
+                // e.event = SL_EVENT_FAILED;
+                // sl_socket_close(e.so);
+                // if ( _sswpkt->callback ) _sswpkt->callback(e);
+                sl_events::server().add_tcpevent(e.so, SL_EVENT_FAILED);
                 return;
             }
         } else if ( _retval == 0 ) {
@@ -772,6 +759,60 @@ sl_peerinfo sl_tcp_get_original_dest(SOCKET_T tso)
 #endif
 }
 
+void _raw_internal_tcp_redirect_callback(SOCKET_T from_so, SOCKET_T to_so) {
+    string _pkt;
+    if ( !sl_tcp_socket_read(from_so, _pkt) ) {
+        sl_events::server().add_tcpevent(from_so, SL_EVENT_FAILED);
+        return;
+    }
+    sl_tcp_socket_send(to_so, _pkt, [from_so, to_so](sl_event to_event) {
+        sl_socket_monitor(
+            from_so, 30, 
+            bind(_raw_internal_tcp_redirect_callback, from_so, to_so)
+        );
+    });
+}
+
+/*
+    Redirect a socket's data to another peer via socks5 proxy.
+
+    @Description
+    This method will continuously redirect the data between from_so and the 
+    peer side socket. 
+    When one side close or drop the connection, this method will close
+    both side's sockets.
+*/
+void sl_tcp_socket_redirect(
+    SOCKET_T from_so,
+    const sl_peerinfo& peer,
+    const sl_peerinfo& socks5
+)
+{
+    sl_tcp_socket_connect(socks5, peer.ipaddress, peer.port_number, 5, [=](sl_event e) {
+        if ( e.event != SL_EVENT_CONNECT ) {
+            sl_socket_close(from_so);
+            return;
+        }
+        sl_socket_bind_event_failed(e.so, [=](sl_event e) {
+            sl_socket_close(from_so);
+        });
+        sl_socket_bind_event_timeout(e.so, [=](sl_event e) {
+            sl_socket_close(e.so);
+            sl_socket_close(from_so);
+        });
+        sl_socket_bind_event_failed(from_so, [=](sl_event fe) {
+            sl_socket_close(e.so);
+        });
+        sl_socket_bind_event_timeout(from_so, [=](sl_event fe) {
+            sl_socket_close(e.so);
+            sl_socket_close(from_so);
+        });
+
+        // Monitor and redirect the data.
+        sl_socket_monitor(from_so, 30, bind(_raw_internal_tcp_redirect_callback, from_so, e.so));
+        sl_socket_monitor(e.so, 30, bind(_raw_internal_tcp_redirect_callback, e.so, from_so));
+    });
+}
 
 // UDP Methods
 /*
@@ -872,8 +913,9 @@ void _raw_internal_udp_socket_write(sl_event e)
                 lerror
                     << "failed to send data on udp socket: " << e.so 
                     << ", err(" << errno << "): " << ::strerror(errno) << lend;
-                e.event = SL_EVENT_FAILED;
-                if ( _sswpkt->callback ) _sswpkt->callback(e);
+                // e.event = SL_EVENT_FAILED;
+                // if ( _sswpkt->callback ) _sswpkt->callback(e);
+                sl_events::server().add_udpevent(e.so, _sock_addr, SL_EVENT_FAILED);
                 return;
             }
         } else if ( _retval == 0 ) {
@@ -1159,11 +1201,7 @@ void _raw_internal_async_gethostname_tcp(
 
     sl_peerinfo _resolv_peer = move(resolv_list[use_index]);
 
-    if ( socks5 ) {
-        ldebug << "prepare to connect to socks5 proxy " << socks5 << " to query the dns" << lend;
-    }
     sl_tcp_socket_connect(socks5, _resolv_peer.ipaddress, _resolv_peer.port_number, 3, [=](sl_event e) {
-        ldebug << "tcp connected in dns request retrun the event " << e << lend;
         if ( e.event != SL_EVENT_CONNECT ) {
             _errorfp(e);
             return;
@@ -1176,7 +1214,7 @@ void _raw_internal_async_gethostname_tcp(
             _errorfp(e);
         });
         sl_tcp_socket_send(e.so, query_pkt.to_tcp_packet(), [=](sl_event e){
-            sl_socket_monitor(e.so, 1, [=](sl_event e){
+            sl_socket_monitor(e.so, 3, [=](sl_event e){
                 // Read incoming
                 string _tcp_incoming_pkt;
                 bool _ret = sl_tcp_socket_read(e.so, _tcp_incoming_pkt);
@@ -1276,6 +1314,69 @@ void sl_async_gethostname(
         _raw_internal_async_gethostname_tcp(move(_pkt), move(nameserver_list), 0, socks5, fp);
     } else {
         _raw_internal_async_gethostname_udp(move(_pkt), move(nameserver_list), 0, fp);
+    }
+}
+
+/*!
+    Redirect a dns query packet to the specified nameserver, and return the 
+    dns response packet from the server.
+    If specified the socks5 proxy, will force to use tcp redirect.
+*/
+void sl_async_redirect_dns_query(
+    const sl_dns_packet & dpkt,
+    const sl_peerinfo &nameserver,
+    const sl_peerinfo &socks5,
+    async_dns_redirector fp
+)
+{
+    auto _errorfp = [=]() {
+        sl_dns_packet _dpkt(dpkt);
+        // This is a response
+        _dpkt.set_is_query_request(false);
+        _dpkt.set_resp_code(sl_dns_rcode_server_failure);
+        if ( fp ) fp(_dpkt);
+    };
+    if ( socks5 ) {
+        sl_tcp_socket_connect(socks5, nameserver.ipaddress, nameserver.port_number, 1000, [=](sl_event e) {
+            if ( e.event != SL_EVENT_CONNECT ) {
+                // Failed
+                _errorfp();
+                return;
+            }
+
+            sl_tcp_socket_send(e.so, dpkt.to_tcp_packet(), [=](sl_event e) {
+                string _rpkt;
+                if ( !sl_tcp_socket_read(e.so, _rpkt) ) {
+                    sl_socket_close(e.so);
+                    _errorfp();
+                    return;
+                }
+                sl_socket_close(e.so);
+                sl_dns_packet _dpkt(_rpkt);
+                if ( fp ) fp(_dpkt);
+            });
+        });
+    } else {
+        SOCKET_T _uso = sl_udp_socket_init();
+        sl_events::server().append_handler(_uso, SL_EVENT_FAILED, [=](sl_event e) {
+            _errorfp();
+        });
+        sl_events::server().append_handler(_uso, SL_EVENT_TIMEOUT, [=](sl_event e) {
+            _errorfp();
+        });
+        sl_udp_socket_send(_uso, nameserver, dpkt, [=](sl_event e) {
+            sl_socket_monitor(_uso, 3, [=](sl_event e) {
+                string _rpkt;
+                if ( !sl_udp_socket_read(e.so, e.address, _rpkt) ) {
+                    sl_socket_close(e.so);
+                    _errorfp();
+                    return;
+                }
+                sl_socket_close(e.so);
+                sl_dns_packet _dpkt(_rpkt);
+                if ( fp ) fp(_dpkt);
+            });
+        });
     }
 }
 /*

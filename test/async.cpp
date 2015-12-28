@@ -28,20 +28,6 @@ void dump_iplist(const string& domain, const vector<sl_ip> & iplist) {
     }
 }
 
-void tcp_redirect_callback(sl_event from_event, sl_event to_event) {
-    string _pkt;
-    if ( !sl_tcp_socket_read(from_event.so, _pkt) ) {
-        sl_events::server().add_tcpevent(from_event.so, SL_EVENT_FAILED);
-        return;
-    }
-    //ldebug << "we get incoming data from socket " << from_event.so << ", will send to socket " << to_event.so << ", length: " << _pkt.size() << lend;
-    sl_tcp_socket_send(to_event.so, _pkt, [from_event](sl_event to_event) {
-        //ldebug << "the data has been sent from socket " << from_event.so << " to socket " << to_event.so << lend;
-        //ldebug << "we now going to re-monitor the socket " << from_event.so << lend;
-        sl_socket_monitor(from_event.so, 30, bind(tcp_redirect_callback, placeholders::_1, to_event));
-    });
-}
-
 string _socks5 = "127.0.0.1:1080";
 
 int main( int argc, char * argv[] )
@@ -120,34 +106,20 @@ int main( int argc, char * argv[] )
             }
         );
     });
-    sl_tcp_socket_listen(sl_peerinfo(INADDR_ANY, 58423), [](sl_event e){
-        sl_tcp_socket_connect(_socks5, "106.187.97.108", 38422, 5, [e](sl_event re) {
-            if ( re.event != SL_EVENT_CONNECT ) {
-                sl_socket_close(e.so);
-                return;
-            }
 
-            ldebug << "in the main runloop of async test code. we connected to the ssh server" << lend;
-            sl_socket_bind_event_failed(e.so, [=](sl_event e) {
-                sl_socket_close(re.so);
-            });
-            sl_socket_bind_event_timeout(e.so, [=](sl_event e) {
-                ldebug << "socket " << e.so << " monitor run out of time" << lend;
-                sl_socket_close(e.so);
-                sl_socket_close(re.so);
-            });
-            sl_socket_bind_event_failed(re.so, [=](sl_event re) {
-                sl_socket_close(e.so);
-            });
-            sl_socket_bind_event_timeout(re.so, [=](sl_event re) {
-                ldebug << "socket " << re.so << " monitor run out of time" << lend;
-                sl_socket_close(e.so);
-                sl_socket_close(re.so);
-            });
-
-            sl_socket_monitor(e.so, 30, bind(tcp_redirect_callback, placeholders::_1, re));
-            sl_socket_monitor(re.so, 30, bind(tcp_redirect_callback, placeholders::_1, e));
+    SOCKET_T _urso = sl_udp_socket_init(sl_peerinfo(INADDR_ANY, 2002));
+    sl_udp_socket_listen(_urso, [](sl_event e) {
+        string _dnspkt;
+        sl_udp_socket_read(e.so, e.address, _dnspkt);
+        sl_dns_packet _dpkt(_dnspkt);
+        sl_async_redirect_dns_query(_dpkt, sl_peerinfo("119.29.29.29:53"), sl_peerinfo::nan(), [=](const sl_dns_packet& rpkt) {
+            dump_iplist(_dpkt.get_query_domain(), rpkt.get_A_records());
+            sl_peerinfo _pi(e.address.sin_addr.s_addr, ntohs(e.address.sin_port));
+            sl_udp_socket_send(e.so, _pi, rpkt);
         });
+    });
+    sl_tcp_socket_listen(sl_peerinfo(INADDR_ANY, 58423), [](sl_event e){
+        sl_tcp_socket_redirect(e.so, sl_peerinfo("10.15.11.1:38422"), sl_peerinfo::nan());
     });
     return 0;
 }
