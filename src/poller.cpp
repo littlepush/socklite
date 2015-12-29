@@ -30,7 +30,7 @@ const string sl_event_name(uint32_t eid)
 	static string _failed = " SL_EVENT_FAILED ";
 	static string _write = " SL_EVENT_WRITE|SL_EVENT_CONNECT ";
 	static string _timeout = " SL_EVENT_TIMEOUT ";
-	static string _unknow = " Unknow Event ";
+	static string _unknown = " Unknown Event ";
 
 	string _name;
 	if ( eid & SL_EVENT_ACCEPT ) _name += _accept;
@@ -38,7 +38,7 @@ const string sl_event_name(uint32_t eid)
 	if ( eid & SL_EVENT_FAILED ) _name += _failed;
 	if ( eid & SL_EVENT_WRITE ) _name += _write;
 	if ( eid & SL_EVENT_TIMEOUT ) _name += _timeout;
-	if ( _name.size() == 0 ) return _unknow;
+	if ( _name.size() == 0 ) return _unknown;
 	return _name;
 }
 // Output of the event

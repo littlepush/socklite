@@ -898,6 +898,7 @@ void _raw_internal_udp_socket_write(sl_event e)
     _sock_addr.sin_port = htons(_sswpkt->peerinfo.port_number);
     _sock_addr.sin_addr.s_addr = (uint32_t)_sswpkt->peerinfo.ipaddress;
 
+    bool _force_remove_top_packet = false;
     while ( _sswpkt->sent_size < _sswpkt->packet.size() ) {
         int _retval = ::sendto(e.so, 
             _sswpkt->packet.c_str() + _sswpkt->sent_size, 
@@ -916,6 +917,7 @@ void _raw_internal_udp_socket_write(sl_event e)
                 // e.event = SL_EVENT_FAILED;
                 // if ( _sswpkt->callback ) _sswpkt->callback(e);
                 sl_events::server().add_udpevent(e.so, _sock_addr, SL_EVENT_FAILED);
+                _force_remove_top_packet = true;
                 return;
             }
         } else if ( _retval == 0 ) {
@@ -929,7 +931,7 @@ void _raw_internal_udp_socket_write(sl_event e)
     // Check if has pending data
     do {
         lock_guard<mutex> _(*_wi.locker);
-        if ( _sswpkt->sent_size == _sswpkt->packet.size() ) {
+        if ( _sswpkt->sent_size == _sswpkt->packet.size() || _force_remove_top_packet ) {
             _wi.packet_queue->pop();
         }
         if ( _wi.packet_queue->size() == 0 ) break;
@@ -1071,13 +1073,20 @@ void sl_udp_socket_listen(
 )
 {
     if ( SOCKET_NOT_VALIDATE(uso) ) return;
+
+    auto _listen_callback = [=](sl_event e) {
+        lerror << "UDP socket " << e.so << " fetch unexcepted event: " << e << lend;
+        // Re-monitor
+        sl_udp_socket_listen(e.so, accept_callback);
+    };
+    // Force to update the failed & timeout handler
+    sl_events::server().update_handler(uso, SL_EVENT_FAILED | SL_EVENT_TIMEOUT, _listen_callback);
+
+    // Monitor the read event
     sl_socket_monitor(uso, 0, [=](sl_event e) {
         if ( accept_callback ) accept_callback(e);
         sl_udp_socket_listen(e.so, accept_callback);
     });
-    // uint32_t _port;
-    // network_sock_info_from_socket(uso, _port);
-    // linfo << "start to listening udp on " << _port << lend;
 }
 
 // Global DNS Server List
