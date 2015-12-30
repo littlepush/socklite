@@ -56,12 +56,15 @@ typedef struct tag_sl_handler_set {
 class sl_events
 {
 public:
-    typedef union {
-        struct {
-            uint32_t    timeout;
-            uint32_t    eventid;
-        } flags;
-        uint64_t        event_info;
+    typedef struct {
+        union {
+            struct {
+                uint32_t    timeout;
+                uint32_t    eventid;
+            };
+            uint64_t        event_info;
+        };
+        uint64_t            unsaved;
     } event_mask;
 
     // Return an empty handler set 
@@ -89,8 +92,7 @@ protected:
     mutable mutex           event_mutex_;
     // Before monitor, before fetching, and after fetching, 
     // will re-order this map for all monitoring events.
-    semmap_t                event_unprocessed_map_;
-    semmap_t                event_unfetching_map_;
+    semmap_t                event_remonitor_map_;
 
     // Internal Run Loop Properties.
     // Change of time piece and runloop callback should lock this

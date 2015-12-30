@@ -136,34 +136,33 @@ void sl_events::_internal_runloop()
         // Combine all pending events
         do {
             lock_guard<mutex> _(event_mutex_);
-            for ( auto _eit = begin(event_unfetching_map_); _eit != end(event_unfetching_map_); ++_eit ) {
-                if ( _eit->second.flags.eventid == 0 ) continue;    // the socket is still alve, but not active.
-                auto _epit = event_unprocessed_map_.find(_eit->first);
-                if ( _epit == end(event_unprocessed_map_) ) continue;
+            for ( 
+                auto _ermit = begin(event_remonitor_map_); 
+                _ermit != end(event_remonitor_map_);
+                ++_ermit
+                )
+            {
+                if ( _ermit->second.unsaved == 0 ) continue;
+                if ( _ermit->second.eventid == 0 ) continue;
                 #if DEBUG
-                ldebug << "re-monitor on socket " << _eit->first << " for event " << sl_event_name(_eit->second.flags.eventid) << lend;
+                ldebug 
+                    << "re-monitor on socket " << _ermit->first
+                    << " for event " << sl_event_name(_ermit->second.eventid) 
+                << lend;
                 #endif
-                sl_poller::server().monitor_socket(_eit->first, true, _eit->second.flags.eventid, _eit->second.flags.timeout);
+                sl_poller::server().monitor_socket(
+                    _ermit->first, true, 
+                    _ermit->second.eventid, 
+                    _ermit->second.timeout
+                    );
+                _ermit->second.unsaved = 0;
             }
         } while ( false );
         //ldebug << "current pending events: " << _event_list.size() << lend;
         size_t _ecount = sl_poller::server().fetch_events(_event_list, _tp);
         if ( _ecount != 0 ) {
             //ldebug << "fetch some events, will process them" << lend;
-            events_pool_.notify_lots(_event_list, &event_mutex_, [&](const sl_event && e){
-                if ( e.event != SL_EVENT_WRITE && e.event != SL_EVENT_DATA ) return;
-                auto _eit = event_unfetching_map_.find(e.so);
-                if ( _eit == end(event_unfetching_map_) ) return;
-                _eit->second.flags.eventid &= (~e.event);
-
-                // Add this event to un_processing map
-                auto _epit = event_unprocessed_map_.find(e.so);
-                if ( _epit == end(event_unprocessed_map_) ) {
-                    event_unprocessed_map_[e.so] = {{0, e.event}};
-                } else {
-                    _epit->second.flags.eventid |= e.event;
-                }
-            });
+            events_pool_.notify_lots(_event_list, &event_mutex_);
         }
         // Invoke the callback
         if ( _fp != NULL ) {
@@ -219,13 +218,10 @@ void sl_events::_internal_worker()
                 _handler = this->_fetch_handler(_s, e.event);
             } else {
                 _handler = this->_replace_handler(_s, e.event, NULL);
-
-                auto _eit = event_unprocessed_map_.find(e.so);
-                if ( _eit == end(event_unprocessed_map_) ) return;
-                _eit->second.flags.eventid &= (~e.event);
-                if ( _eit->second.flags.eventid == 0 ) {
-                    event_unprocessed_map_.erase(_eit);
-                }
+                auto _ermit = event_remonitor_map_.find(e.so);
+                if ( _ermit == end(event_remonitor_map_) ) return;
+                _ermit->second.eventid &= (~e.event);
+                _ermit->second.unsaved = 1;
             }
         }) ) continue;
 
@@ -273,18 +269,9 @@ sl_socket_event_handler sl_events::_fetch_handler(SOCKET_T so, SL_EVENT_ID eid)
 
 bool sl_events::_has_handler(SOCKET_T so, SL_EVENT_ID eid)
 {
-    bool _has = false;
-    auto _epit = event_unprocessed_map_.find(so);
-    if ( _epit != end(event_unprocessed_map_) ) {
-        _has = ((_epit->second.flags.eventid & eid) == eid);
-    }
-    if ( _has ) return true;
-
-    auto _efit = event_unfetching_map_.find(so);
-    if ( _efit != end(event_unfetching_map_) ) {
-        _has = ((_efit->second.flags.eventid & eid) == eid);
-    }
-    return _has;
+    auto _ermit = event_remonitor_map_.find(so);
+    if ( _ermit == end(event_remonitor_map_) ) return false;
+    return (_ermit->second.eventid & eid) > 0;
 }
 
 void sl_events::bind( SOCKET_T so, sl_handler_set&& hset )
@@ -299,8 +286,7 @@ void sl_events::unbind( SOCKET_T so )
     lock_guard<mutex> _hl(handler_mutex_);
     lock_guard<mutex> _el(event_mutex_);
     handler_map_.erase(so);
-    event_unfetching_map_.erase(so);
-    event_unprocessed_map_.erase(so);
+    event_remonitor_map_.erase(so);
 }
 void sl_events::update_handler( SOCKET_T so, uint32_t eid, sl_socket_event_handler&& h)
 {
@@ -362,21 +348,22 @@ void sl_events::monitor(SOCKET_T so, SL_EVENT_ID eid, sl_socket_event_handler ha
     }
 
     // Add the mask
-    auto _efit = event_unfetching_map_.find(so);
-    if ( _efit == end(event_unfetching_map_) ) {
-        event_unfetching_map_[so] = {{timedout, eid}};
+    auto _ermit = event_remonitor_map_.find(so);
+    if ( _ermit == end(event_remonitor_map_) ) {
+        event_remonitor_map_[so] = {{{0, 0}}, 1};
     } else {
-        //_efit->second.flags.timeout = timedout;
-        if ( _efit->second.flags.timeout != 0 ) {
+        if ( _ermit->second.timeout != 0 ) {
             if ( timedout == 0 ) {
-                _efit->second.flags.timeout = 0;
+                _ermit->second.timeout = 0;
             } else {
-                _efit->second.flags.timeout = max(_efit->second.flags.timeout, timedout);
+                timedout = max(_ermit->second.timeout, timedout);
+                _ermit->second.timeout = timedout;
             }
+        } else {
+            timedout = 0;
         }
-        _efit->second.flags.eventid |= eid;
+        _ermit->second.eventid |= eid;
     }
-
     // Update the handler
     this->update_handler(so, eid, move(handler));
 
@@ -404,11 +391,11 @@ void sl_events::add_event(sl_event && e)
     //lock_guard<mutex> _(events_lock_);
     lock_guard<mutex> _(event_mutex_);
     
-    auto _efit = event_unfetching_map_.find(e.so);
-    if ( _efit == end(event_unfetching_map_) ) {
-        event_unfetching_map_[e.so] = {{30000, e.event}};
+    auto _ermit = event_remonitor_map_.find(e.so);
+    if ( _ermit == end(event_remonitor_map_) ) {
+        event_remonitor_map_[e.so] = {{{30, e.event}}, 0};
     } else {
-        _efit->second.flags.eventid = e.event;
+        _ermit->second.eventid |= e.event;
     }
     events_pool_.notify_one(move(e));
 }
