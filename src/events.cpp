@@ -355,7 +355,7 @@ void sl_events::monitor(SOCKET_T so, SL_EVENT_ID eid, sl_socket_event_handler ha
         #if DEBUG
         ldebug 
             << "socket " << so << " has already pending the handler for event " 
-            << sl_event_name(eid) <<< ", ignore this monitoring request" 
+            << sl_event_name(eid) << ", ignore this monitoring request" 
         << lend;
         #endif
         return;
