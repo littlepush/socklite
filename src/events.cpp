@@ -350,7 +350,7 @@ void sl_events::monitor(SOCKET_T so, SL_EVENT_ID eid, sl_socket_event_handler ha
     // Add the mask
     auto _ermit = event_remonitor_map_.find(so);
     if ( _ermit == end(event_remonitor_map_) ) {
-        event_remonitor_map_[so] = {{{0, 0}}, 1};
+        event_remonitor_map_[so] = {{{timedout, eid}}, 1};
     } else {
         if ( _ermit->second.timeout != 0 ) {
             if ( timedout == 0 ) {
