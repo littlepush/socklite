@@ -365,6 +365,11 @@ bool sl_poller::monitor_socket(
 	return true;
 }
 
+void sl_poller::unmonitor_socket(SOCKET_T so) {
+	lock_guard<mutex> _(m_timeout_mutex);
+	m_timeout_map.erase(so);
+}
+
 sl_poller &sl_poller::server() {
 	static sl_poller _g_poller;
 	return _g_poller;

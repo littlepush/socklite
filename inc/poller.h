@@ -141,6 +141,12 @@ public:
         uint32_t timedout = 30 
     );
 
+    /*
+        When close a socket, remove the socket from the
+        timeout map. The socket will auto be removed from epoll/kqueue.
+    */
+    void unmonitor_socket(SOCKET_T so);
+
 	// Singleton Poller Item
 	static sl_poller &server();
 };

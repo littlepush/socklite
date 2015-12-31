@@ -162,7 +162,12 @@ void sl_events::_internal_runloop()
         size_t _ecount = sl_poller::server().fetch_events(_event_list, _tp);
         if ( _ecount != 0 ) {
             //ldebug << "fetch some events, will process them" << lend;
-            events_pool_.notify_lots(_event_list, &event_mutex_);
+            events_pool_.notify_lots(_event_list, &event_mutex_, [this](const sl_event&& e){
+                if ( e.event != SL_EVENT_WRITE && e.event != SL_EVENT_DATA ) return;
+                auto _ermit = event_remonitor_map_.find(e.so);
+                if ( _ermit == end(event_remonitor_map_) ) return;
+                _ermit->second.unsaved = 0;
+            });
         }
         // Invoke the callback
         if ( _fp != NULL ) {
@@ -287,6 +292,7 @@ void sl_events::unbind( SOCKET_T so )
     lock_guard<mutex> _el(event_mutex_);
     handler_map_.erase(so);
     event_remonitor_map_.erase(so);
+    sl_poller::server().unmonitor_socket(so);
 }
 void sl_events::update_handler( SOCKET_T so, uint32_t eid, sl_socket_event_handler&& h)
 {
