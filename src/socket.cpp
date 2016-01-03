@@ -278,7 +278,14 @@ sl_peerinfo::sl_peerinfo(const string &ipstring, uint16_t port)
     format_ += to_string(port_);
 }
 sl_peerinfo::sl_peerinfo(const sl_peerinfo& rhs)
-: ip_(rhs.ip_), port_(rhs.port_), ipaddress(ip_), port_number(port_) { }
+: ip_(rhs.ip_), port_(rhs.port_), format_(rhs.format_), ipaddress(ip_), port_number(port_) { }
+sl_peerinfo::sl_peerinfo(const struct sockaddr_in addr)
+: ip_(addr.sin_addr.s_addr), port_(ntohs(addr.sin_port)), ipaddress(ip_), port_number(port_) 
+{
+    format_ = (const string &)ip_;
+    format_ += ":";
+    format_ += to_string(port_);
+}
 
 sl_peerinfo & sl_peerinfo::operator = (const sl_peerinfo& rhs) {
     ip_ = rhs.ip_;

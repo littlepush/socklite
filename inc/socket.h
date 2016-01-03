@@ -304,6 +304,7 @@ public:
     sl_peerinfo(const string &format_string);
     sl_peerinfo(const string &ipaddr, uint16_t port);
     sl_peerinfo(const sl_peerinfo& rhs);
+    sl_peerinfo(const struct sockaddr_in addr);
     sl_peerinfo & operator = (const sl_peerinfo& rhs);
     sl_peerinfo & operator = (const string &format_string);
 

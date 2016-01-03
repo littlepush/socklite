@@ -186,6 +186,11 @@ public:
     sl_dns_packet(const string& packet, bool is_tcp_packet = false);
     sl_dns_packet(uint16_t trans_id, const string& query_domain);
 
+    // Check if the packet is a validate dns packet
+    operator bool() const;
+    bool is_validate_query() const;
+    bool is_validate_response() const;
+
     // Operators
     sl_dns_packet& operator = (const sl_dns_packet& rhs);
     sl_dns_packet& operator = (const sl_dns_packet&& rhs);

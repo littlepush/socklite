@@ -77,6 +77,12 @@ int main( int argc, char * argv[] )
         string _dnspkt;
         sl_udp_socket_read(e.so, e.address, _dnspkt);
         sl_dns_packet _dpkt(_dnspkt);
+        if ( !_dpkt.is_validate_query() ) {
+            lwarning 
+                << "receive an invalidate dns query packet from " 
+                << sl_peerinfo(e.address) << lend;
+            return;
+        }
 
         sl_peerinfo _pi(e.address.sin_addr.s_addr, ntohs(e.address.sin_port));
         linfo << "get request from " << _pi << " to query domain " << _dpkt.get_query_domain() << lend;
@@ -92,6 +98,14 @@ int main( int argc, char * argv[] )
         string _dnspkt;
         sl_udp_socket_read(e.so, e.address, _dnspkt);
         sl_dns_packet _dpkt(_dnspkt);
+
+        if ( !_dpkt.is_validate_query() ) {
+            lwarning 
+                << "receive an invalidate dns query packet from " 
+                << sl_peerinfo(e.address) << lend;
+            return;
+        }
+
         sl_peerinfo _pi(e.address.sin_addr.s_addr, ntohs(e.address.sin_port));
         linfo << "get request from " << _pi << " to query domain " << _dpkt.get_query_domain() << lend;
         sl_async_gethostname(
@@ -112,6 +126,14 @@ int main( int argc, char * argv[] )
         string _dnspkt;
         sl_udp_socket_read(e.so, e.address, _dnspkt);
         sl_dns_packet _dpkt(_dnspkt);
+
+        if ( !_dpkt.is_validate_query() ) {
+            lwarning 
+                << "receive an invalidate dns query packet from " 
+                << sl_peerinfo(e.address) << lend;
+            return;
+        }
+
         sl_async_redirect_dns_query(_dpkt, sl_peerinfo("119.29.29.29:53"), sl_peerinfo::nan(), false, [=](const sl_dns_packet& rpkt) {
             dump_iplist(_dpkt.get_query_domain(), rpkt.get_A_records());
             sl_peerinfo _pi(e.address.sin_addr.s_addr, ntohs(e.address.sin_port));
