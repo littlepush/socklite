@@ -310,6 +310,30 @@ bool sl_udp_socket_read(
     size_t min_buffer_size = 512
 );
 
+/*
+    Read data from the UDP socket until limit bytes.
+
+    If limit_bytes is 0, is the same as sl_udp_socket_read
+*/
+bool sl_udp_socket_read_limit(
+    SOCKET_T uso,
+    struct sockaddr_in addr,
+    string& buffer,
+    size_t limit_bytes
+);
+
+/*
+    Read but not fetch the data from the socket buffer.
+
+    if up_to_bytes is 0, will return false.
+*/
+bool sl_udp_socket_check_packet(
+    SOCKET_T uso,
+    struct sockaddr_in addr,
+    char *pbuffer,
+    size_t up_to_bytes
+);
+
 #endif 
 // sock.raw.h
 

@@ -1006,7 +1006,7 @@ bool sl_udp_socket_read(
 {
     if ( SOCKET_NOT_VALIDATE(uso) ) return false;
 
-    sl_peerinfo _pi(addr.sin_addr.s_addr, ntohs(addr.sin_port));
+    sl_peerinfo _pi(addr);
 
     // Socket must be nonblocking
     buffer.clear();
@@ -1016,8 +1016,14 @@ bool sl_udp_socket_read(
 
     do {
         unsigned _so_len = sizeof(addr);
-        int _retCode = ::recvfrom( uso, &buffer[0], min_buffer_size, 0,
-            (struct sockaddr *)&addr, &_so_len);
+        int _retCode = ::recvfrom( 
+            uso, 
+            &buffer[0] + _received, 
+            _leftspace, 
+            0,
+            (struct sockaddr *)&addr, 
+            &_so_len
+        );
         if ( _retCode < 0 ) {
             if ( errno == EINTR ) continue;    // signal 7, retry
             if ( errno == EAGAIN || errno == EWOULDBLOCK ) {
@@ -1057,6 +1063,112 @@ bool sl_udp_socket_read(
         }
     } while ( true );
     return true;
+}
+/*
+    Read data from the UDP socket until limit bytes.
+
+    If limit_bytes is 0, is the same as sl_udp_socket_read
+*/
+bool sl_udp_socket_read_limit(
+    SOCKET_T uso,
+    struct sockaddr_in addr,
+    string& buffer,
+    size_t limit_bytes
+)
+{
+    if ( SOCKET_NOT_VALIDATE(uso) ) return false;
+
+    if ( limit_bytes == 0 ) {
+        return sl_udp_socket_read(uso, addr, buffer);
+    }
+    // Check if the socket has so many data in the buffer
+    if ( ! sl_udp_socket_check_packet(uso, addr, NULL, limit_bytes) ) return false;
+    sl_peerinfo _pi(addr);
+
+    // Socket must be nonblocking
+    buffer.clear();
+    buffer.resize(limit_bytes);
+    size_t _received = 0;
+    size_t _leftspace = limit_bytes;
+
+    do {
+        unsigned _so_len = sizeof(addr);
+        int _retCode = ::recvfrom( 
+            uso, 
+            &buffer[0] + _received, 
+            _leftspace, 
+            0,
+            (struct sockaddr *)&addr, 
+            &_so_len
+        );
+        if ( _retCode < 0 ) {
+            if ( errno == EINTR ) continue;    // signal 7, retry
+            if ( errno == EAGAIN || errno == EWOULDBLOCK ) {
+                // No more data on a non-blocking socket
+                buffer.resize(_received);
+                return true;
+            }
+            // Other error
+            buffer.resize(0);
+            lerror << "failed to receive data on udp socket: " << uso << "(" << _pi << "), " << ::strerror( errno ) << lend;
+            return false;
+        } else if ( _retCode == 0 ) {
+            // Peer Close
+            buffer.resize(0);
+            lerror << "the peer has close the socket, recv 0" << lend;
+            return false;
+        } else {
+            _received += _retCode;
+            _leftspace -= _retCode;
+        }
+    } while ( _leftspace > 0 );
+    return true;
+}
+
+/*
+    Read but not fetch the data from the socket buffer.
+
+    if up_to_bytes is 0, will return false.
+*/
+bool sl_udp_socket_check_packet(
+    SOCKET_T uso,
+    struct sockaddr_in addr,
+    char *pbuffer,
+    size_t up_to_bytes
+)
+{
+    if ( SOCKET_NOT_VALIDATE(uso) ) return false;
+    sl_peerinfo _pi(addr);
+
+    do {
+        unsigned _so_len = sizeof(addr);
+        int _retCode = ::recvfrom( 
+            uso, 
+            pbuffer,
+            up_to_bytes, 
+            MSG_PEEK,
+            (struct sockaddr *)&addr, 
+            &_so_len
+        );
+        if ( _retCode < 0 ) {
+            if ( errno == EINTR ) continue;    // signal 7, retry
+            if ( errno == EAGAIN || errno == EWOULDBLOCK ) {
+                // No more data on a non-blocking socket
+                lwarning << "No data in the udp socket: " << uso << "(" << _pi << ") buffer." << lend;
+                return false;
+            }
+            // Other error
+            lerror << "failed to receive data on udp socket: " << uso << "(" << _pi << "), " << ::strerror( errno ) << lend;
+            return false;
+        } else if ( _retCode == 0 ) {
+            // Peer Close
+            lerror << "the peer has close the socket, recv 0" << lend;
+            return false;
+        } else {
+            return (_retCode == up_to_bytes);
+        }
+    } while ( true );
+    return false;
 }
 
 /*
